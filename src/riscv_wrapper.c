@@ -350,14 +350,38 @@ void ossave(char *p, void *addr, int len) { // Save a file from memory
 }
 
 void *osopen(int type, char *p) { // Open a file
-   text("TODO: osopen");
-   crlf();
-   return NULL;
+   register int   a0 asm ("a0");
+   register void *a1 asm ("a1") = p;
+   register int   a7 asm ("a7") = 12;
+	if (type == 0) {
+      a0 = 0x40; // input only
+   } else if (type == 1) {
+      a0 = 0x80; // output only
+   } else {
+      a0 = 0xc0; // update (random access)
+   }
+   asm volatile ("ecall"
+                 : // outputs
+                   "+r" (a0)
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a1),
+                   "r"  (a7)
+                 );
+   return (void *) a0;
 }
 
 void osshut(void *chan) { // Close file(s)
-   text("TODO: osshut");
-   crlf();
+   register int   a0 asm ("a0") = 0;
+   register void *a1 asm ("a1") = chan;
+   register int   a7 asm ("a7") = 12;
+   asm volatile ("ecall"
+                 : // outputs
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a1),
+                   "r"  (a7)
+                 );
 }
 
 long long geteof(void *chan) {  // Get EOF status
@@ -384,9 +408,24 @@ long long getptr(void *chan) { // Get file pointer
 }
 
 unsigned char osbget(void *chan, int *peof) { // Read a byte from a file
-   text("TODO: osbget");
-   crlf();
-   return 0;
+   register int   a0 asm ("a0");
+   register void *a1 asm ("a1") = chan;
+   register int   a7 asm ("a7") = 9;
+   asm volatile ("ecall"
+                 : // outputs
+                   "+r" (a0)
+                 : // inputs
+                   "r"  (a1),
+                   "r"  (a7)
+                 );
+   if (peof) {
+      if (a0 < 0) {
+         *peof = -1;
+      } else {
+         *peof = 0;
+      }
+   }
+   return (unsigned char) a0;
 }
 
 void osbput(void *chan, unsigned char byte) { // Write a byte to a file
