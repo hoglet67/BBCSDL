@@ -244,16 +244,22 @@ void oswrch(unsigned char vdu) {   // Write to display or other output stream (V
    asm volatile ("ecall"
                  : // outputs
 
-                 : // inptputs
+                 : // inputs
                    "r"  (a0),
                    "r"  (a7)
                  );
 }
 
 unsigned char osrdch(void) { // Get character from console input
-   text("TODO: oscrdch");
-   crlf();
-   return 0;
+   register int a0 asm ("a0") ;
+   register int a7 asm ("a7") = 6;
+   asm volatile ("ecall"
+                 : // outputs
+                   "+r" (a0)
+                 : // inputs
+                   "r"  (a7)
+                 );
+   return (unsigned char)(a0 & 0xff);
 }
 
 
