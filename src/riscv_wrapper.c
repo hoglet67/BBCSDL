@@ -323,14 +323,30 @@ void oswait(int cs) { // Pause for a specified time
 // MOS - File
 
 
+void osfile(int reason, char *filename, void *load, void *exec, void *start, void *end) {
+   void *block[4] = {load, exec, start, end};
+   register int   a0 asm ("a0") = reason;
+   register void *a1 asm ("a1") = filename;
+   register void *a2 asm ("a2") = block;
+   register int   a7 asm ("a7") = 7;
+   asm volatile ("ecall"
+                 : // outputs
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a1),
+                   "r"  (a2),
+                   "r"  (a7)
+                 : // clobber
+                   "memory"
+                 );
+}
+
 void osload(char *p, void *addr, int max) { // Load a file to memory
-   text("TODO: osload");
-   crlf();
+   osfile(255, p, addr, NULL, NULL, NULL);
 }
 
 void ossave(char *p, void *addr, int len) { // Save a file from memory
-   text("TODO: ossave");
-   crlf();
+   osfile(0, p, NULL, NULL, addr, addr + len);
 }
 
 void *osopen(int type, char *p) { // Open a file
