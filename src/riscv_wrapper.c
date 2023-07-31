@@ -52,10 +52,45 @@ int basic(void *ecx, void *edx, void *prompt);
 // Declared in bbeval.c:
 unsigned int rnd(void);        // Return a pseudo-random number
 
-// Forward declarations
-heapptr oshwm(void *addr, int settop);
+typedef void (*handler_fn_type)(int a0);
 
-int _start(char *params) {
+extern void escape_handler();
+
+heapptr oshwm(void *addr, int settop) {  // Allocate memory above HIMEM
+   if ((addr < userRAM) ||(addr > (userRAM + MaximumRAM))) {
+      return 0;
+   } else {
+      if (settop && (addr > userTOP)) {
+         userTOP = addr;
+      }
+      return (size_t) addr;
+   }
+}
+
+void oshandlers(unsigned int num, void *handler_fn, void *handler_data, void **old_handler_fn, void **old_handler_data) {
+   register int   a0 asm ("a0") = num;
+   register void *a1 asm ("a1") = handler_fn;
+   register void *a2 asm ("a2") = handler_data;
+   register int   a7 asm ("a7") = 14;
+   asm volatile ("ecall"
+                 : // outputs
+                   "+r" (a1),
+                   "+r" (a2)
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a1),
+                   "r"  (a2),
+                   "r"  (a7)
+                 );
+   if (old_handler_fn) {
+      *old_handler_fn = a1;
+   }
+   if (old_handler_data) {
+      *old_handler_data = a2;
+   }
+}
+
+int _main(char *params) {
 
    platform = 0;
 
@@ -104,10 +139,18 @@ int _start(char *params) {
          crlf();
       }
 
-   return basic(progRAM, userTOP, immediate);
+   // Install new escape handler
+   void *old_handler;
+
+   oshandlers(0xfffe, escape_handler, 0, &old_handler, NULL);
+
+   int ret = basic(progRAM, userTOP, immediate);
+
+   // Restore old escape handler
+   oshandlers(0xfffe, old_handler, 0, NULL, NULL);
+
+   return ret;
 }
-
-
 
 static char *__heap_start = (char *) 0xf80000;
 static char *__heap_end = (char *) 0xff0000;
@@ -142,16 +185,6 @@ void gfxPrimitivesSetFont(void) {
 void gfxPrimitivesGetFont(void) {
 };
 
-heapptr oshwm(void *addr, int settop) {  // Allocate memory above HIMEM
-   if ((addr < userRAM) ||(addr > (userRAM + MaximumRAM))) {
-      return 0;
-   } else {
-      if (settop && (addr > userTOP)) {
-         userTOP = addr;
-      }
-      return (size_t) addr;
-   }
-}
 
 // In bbcvdu.c
 
@@ -280,7 +313,6 @@ void osword(int al, void *xy) {
                    "memory"
                  );
 }
-
 
 void oswait(int cs) { // Pause for a specified time
    text("TODO: oswait");
@@ -482,10 +514,8 @@ void *sysadr(char *) { // Get the address of an API function
 
 // Check for Escape (if enabled) and kill:
 void trap(void) { // Test for ESCape
-   // TODO: this should come from OS Handlers structure
-   volatile int *escflag = (int *) 0xF00004;
-   text("trap() ");
-   if (*escflag) {
+   if (flags & ESCFLG) {
+      flags &= ~ESCFLG;  // Clear Basic's escape flag
       osbyte(0x7e, 0);   // Acknowledge ESCape
       error (17, NULL) ; // 'Escape'
    }
