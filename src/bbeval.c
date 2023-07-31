@@ -20,7 +20,11 @@
 #include <setjmp.h>
 #include "BBC.h"
 
-#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__
+#if defined __riscv__
+#define floorl floor
+#endif
+
+#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
 #define powl pow
 #define sqrtl sqrt
 #define sinl sin
@@ -96,7 +100,7 @@ void *sysadr (char *) ;		// Get the address of an API function
 // Global jump buffer:
 extern jmp_buf env ;
 
-#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__
+#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
 static void setfpu(void) {}
 static double xpower[9] = {1.0e1, 1.0e2, 1.0e4, 1.0e8, 1.0e16, 1.0e32, 1.0e64,
 			   1.0e128, 1.0e256} ;
@@ -203,7 +207,7 @@ int strhex (VAR v, char *dst, int field)
 }
 
 // Multiply by an integer-power of 10:
-#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__
+#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
 static double xpow10 (double n, int p)
 {
 	int f = 0, i = 0 ;
@@ -1485,7 +1489,7 @@ VAR item (void)
 
 		case TPI:
 			if (*esi == '#') esi++ ;
-#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__
+#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
 			v.i.n = 0x400921FB54442D18L ;
 			v.i.t = 1 ;
 #else
@@ -1545,7 +1549,7 @@ VAR item (void)
 /************************************* DEG *************************************/
 
 		case TDEG:
-#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__
+#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
 			v.i.n = 0x404CA5DC1A63C1F8L ;
 			v.i.t = 1 ;
 #else
@@ -1557,7 +1561,7 @@ VAR item (void)
 /************************************* RAD *************************************/
 
 		case TRAD:
-#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__
+#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
 			v.i.n = 0x3F91DF46A2529D39L ;
 			v.i.t = 1 ;
 #else
@@ -1591,7 +1595,7 @@ VAR item (void)
 #endif
 			{
 			VAR loge ;
-#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__
+#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
 			loge.i.n = 0x3FDBCB7B1526E50EL ;
 			loge.i.t = 1 ;
 #else

@@ -15,6 +15,10 @@
 #include <math.h>
 #include "BBC.h"
 
+#if defined __riscv__
+#define truncl trunc
+#endif
+
 // Routines in bbmain:
 int range1 (char) ;		// Test char for valid in a variable name
 signed char nxt (void) ;	// Skip spaces, handle line continuation

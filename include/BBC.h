@@ -6,6 +6,10 @@
 *       Version 1.34b, 20-Feb-2023                                 *
 \******************************************************************/
 
+#ifdef __riscv
+#define __riscv__
+#endif
+
 // Constants:
 #define STACK_NEEDED 512
 #ifdef PICO
@@ -232,8 +236,8 @@ typedef struct tagPARM
 // to force the type word (.i.t or .s.t member) to a value other than 0 or -1. 
 typedef union __attribute__ ((packed)) __attribute__ ((aligned (4))) tagVAR
 {
-#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__
-	double f ;
+#if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
+ 	double f ;
 #else
         long double f ;
 #endif
@@ -309,6 +313,11 @@ register heapptr *esp asm ("r13") ;	// Stack pointer
 #ifdef __aarch64__
 register signed char *esi asm ("x27") ;	// Program pointer
 register heapptr *esp asm ("x28") ;	// Stack pointer
+#endif
+#ifdef __riscv__
+// TODO: Eventually we should be able to use gp and tp registers
+extern signed char *esi ;		// Program pointer
+extern heapptr *esp ;			// Stack pointer
 #endif
 #endif
 
