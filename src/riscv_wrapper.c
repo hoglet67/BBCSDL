@@ -460,14 +460,16 @@ void quiet(void) {     // Disable sound generation
 }
 
 void sound(short chan, signed char ampl, unsigned char pitch, unsigned char duration) { // Synthesise sound waveform
-
-   text("TODO: sount");
-   crlf();
+   uint16_t block[4];
+   block[0] = chan;
+   block[1] = ampl;
+   block[2] = pitch;
+   block[3] = duration;
+   osword(7, &block);
 }
 
 void envel(signed char *env) {  // ENVELOPE statement
-   text("TODO: eval");
-   crlf();
+   osword(8, env);
 }
 
 // MOS - Time
@@ -494,9 +496,8 @@ int getims(void) {     // Get clock time string to accs
 // MOS - Misc
 
 int adval(int n) {    // ADVAL function
-   text("TODO: adval");
-   crlf();
-   return -1;
+   int yyxxaa = osbyte(128, n);
+   return yyxxaa >> 8;
 }
 
 void faterr(const char *msg) {  // Report a 'fatal' error message
