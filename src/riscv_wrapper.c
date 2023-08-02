@@ -271,10 +271,11 @@ void osline(char *buffer) {     // Get a line of console input
    block[3] = 255;
    register int a0 asm ("a0") = 0;
    register unsigned int *a1 asm ("a1") = block;
+   register int a2 asm ("a2") = 0;
    register int a7 asm ("a7") = 3;
    asm volatile ("ecall"
                  : // outputs
-                   "+r" (a1)
+                   "+r" (a2)
                  : // inputs
                    "r"  (a0),
                    "r"  (a1),
@@ -282,7 +283,10 @@ void osline(char *buffer) {     // Get a line of console input
                  : // clobber
                    "memory"
                  );
-
+   // If escape, make sure the line has a terminator
+   if (a2 < 0) {
+      *buffer = 0x0D;
+   }
 }
 
 int osbyte(int al, int xy) {
