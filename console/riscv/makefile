@@ -34,8 +34,8 @@ bbeval.o: bbeval.c BBC.h
 bbasmb.o: bbasmb_arm_32.c BBC.h
 	$(CXX) $(CFLAGS) $< -o $@
 
-bbdata.o: ../../../BBCSDL/src/bbdata_arm_32.s
-	$(AS) $(ASFLAGS) ../../../BBCSDL/src/bbdata_arm_32.s -o bbdata.o
+bbdata.o: ../../../BBCSDL/src/bbdata_riscv.s
+	$(AS) $(ASFLAGS) ../../../BBCSDL/src/bbdata_riscv.s -o bbdata.o
 
 bbcbasic: $(OBJ)
 	$(CXX) $(OBJ) $(LDFLAGS) -o bbcbasic

@@ -9,23 +9,11 @@
 #define VERSION "1.35a"         // Version string
 
 // From bbccon.h
-#define MAX_PORTS       4       // Maximum number of port channels
-#define MAX_FILES       8       // Maximum number of file channels
 extern char *accs;              // String accumulator
 extern char *buff;              // Temporary string buffer
-extern char* path;              // File path buffer
-extern char **keystr;           // Pointers to user *KEY strings
-extern char* keybdq;            // Keyboard queue (indirect)
-extern int* eventq;             // Event queue (indirect)
-extern void* filbuf[];
-extern unsigned char farray;    // @hfile%() number of dimensions
-extern unsigned int fasize;     // @hfile%() number of elements
-extern RND prand;               // Pseudo-random number
-extern FILE *exchan;            // EXEC channel
-extern FILE *spchan;            // SPOOL channel
+//extern char* path;              // File path buffer
 #define PAGE_OFFSET ACCSLEN + 0x2000     // Offset of PAGE from memory base
 #define MAXIMUM_RAM 0x800000    // Maximum amount of RAM to allocate (currently 8MB)
-extern unsigned int platform;   // OS platform
 
 // Global variables (external linkage):
 void *userRAM = NULL;
@@ -92,8 +80,6 @@ void oshandlers(unsigned int num, void *handler_fn, void *handler_data, void **o
 
 int _main(char *params) {
 
-   platform = 0;
-
    void* immediate = (void *) 1;
 
    userRAM = (void *) 0x100000;
@@ -113,23 +99,11 @@ int _main(char *params) {
 
    accs = (char*) userRAM;                 // String accumulator
    buff = (char*) accs + ACCSLEN;          // Temporary string buffer
-   path = (char*) buff + 0x100;            // File path
-   keystr = (char**)(path + 0x100);       // *KEY strings
-   keybdq = (char*) keystr + 0x100;        // Keyboard queue
-   eventq = (void*) keybdq + 0x100;        // Event queue
-   filbuf[0] = (eventq + 0x200 / 4);       // File buffers n.b. pointer arithmetic!!
-
-   farray = 1;                             // @hfile%() number of dimensions
-   fasize = MAX_PORTS + MAX_FILES + 4;     // @hfile%() number of elements
-
+   //   path = (char*) buff + 0x100;            // File path
 
    prand.l = 12345678;                    /// Seed PRNG
    prand.h = (prand.l == 0);
    rnd();                                 // Randomise !
-
-   memset(keystr, 0, 256);
-   spchan = NULL;
-   exchan = NULL;
 
    if (immediate == (void *) 1)
       {
