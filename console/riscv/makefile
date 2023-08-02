@@ -5,17 +5,18 @@ ARCH=rv32im_zicsr
 ABI=ilp32
 
 CXX = ${BASE}gcc
-
-AS = ${BASE}as -I ../../include -march=${ARCH} -mabi=${ABI}
+AS  = ${BASE}as
 
 OBJ = crt0.o riscv_wrapper.o bbmain.o bbexec.o bbeval.o bbdata.o bbasmb.o
 
-CFLAGS = -Wall -I ../../include -march=${ARCH} -mabi=${ABI} -c -Os
+ASFLAGS = -I ../../include -march=${ARCH} -mabi=${ABI}
+CFLAGS  = --specs=nano.specs -u _printf_float -Wall -I ../../include -march=${ARCH} -mabi=${ABI} -c -Os
+LDFLAGS = --specs=nano.specs -u _printf_float -lm -nostartfiles -Tbbcbasic.ld  -Os
 
 all: bbcbasic
 
 crt0.o: crt0.s
-	$(AS) $< -o $@
+	$(AS) $(ASFLAGS) $< -o $@
 
 riscv_wrapper.o: riscv_wrapper.c BBC.h
 	$(CXX) $(CFLAGS) $< -o $@
@@ -34,12 +35,11 @@ bbasmb.o: bbasmb_arm_32.c BBC.h
 	$(CXX) $(CFLAGS) $< -o $@
 
 bbdata.o: ../../../BBCSDL/src/bbdata_arm_32.s
-	$(AS) ../../../BBCSDL/src/bbdata_arm_32.s -o bbdata.o
+	$(AS) $(ASFLAGS) ../../../BBCSDL/src/bbdata_arm_32.s -o bbdata.o
 
 bbcbasic: $(OBJ)
-	$(CXX) $(OBJ) -lm  -Tbbcbasic.ld -nostartfiles -o bbcbasic
+	$(CXX) $(OBJ) $(LDFLAGS) -o bbcbasic
 	cp bbcbasic ../../
-#-Wl,-s -Wl,-R,'$$ORIGIN'
 
 clean:
 	rm -f $(OBJ)

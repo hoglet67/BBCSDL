@@ -21,7 +21,78 @@
 #include "BBC.h"
 
 #if defined __riscv__
+
 #define floorl floor
+
+static long long powers_of_10[] = {
+   1LL,                      // 10^0
+   10LL,
+   100LL,
+   1000LL,
+   10000LL,
+   100000LL,                 // 10^5
+   1000000LL,
+   10000000LL,
+   100000000LL,
+   1000000000LL,
+   10000000000LL,            // 10^10
+   100000000000LL,
+   1000000000000LL,
+   10000000000000LL,
+   100000000000000LL,
+   1000000000000000LL,       // 10^15
+   10000000000000000LL,
+   100000000000000000LL,
+   1000000000000000000LL     // 10^18
+};
+
+int print_lld(char *buffer, long long i) {
+   char *bp = buffer;
+   if (i == 0) {
+      *bp++ = '0';
+   } else {
+      if (i < 0) {
+         *bp++ = '-';
+         i = -i;  // TODO: this overflows if i = -2^63
+      }
+      // Start at 10^18
+      long long *p = powers_of_10 + 18;
+      // Skip to the lowest power of 10 that is <= i
+      while (*p > i) {
+         p--;
+      }
+      // Flag is used to supress leading zeros
+      int flag = 0;
+      // For each remaining power of 10
+      while (p >= powers_of_10) {
+         int digit = '0';
+         // Repeated subtract from i
+         while (i >= *p) {
+            i -= *p;
+            digit++;
+         }
+         // Output the digit
+         if (digit > '0' || flag) {
+            *bp++ = digit;
+            flag = 1;
+         }
+         p--;
+      }
+   }
+   *bp++ = 0;
+   return strlen(buffer);
+}
+
+int print_llX(char *buffer, unsigned long long u) {
+   unsigned long u1 = (unsigned long)(u >> 32);
+   unsigned long u2 = (unsigned long)(u & 0xffffffff);
+   if (u1) {
+      return sprintf(buffer, "%lX%08lX", u1, u2);
+   } else {
+      return sprintf(buffer, "%lX", u2);
+   }
+}
+
 #endif
 
 #if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
@@ -151,7 +222,11 @@ int str (VAR v, char *dst, int format)
 		if (prec == 0) prec = 9 ;
 		if (v.i.t == 0)
 		    {
+#ifdef __riscv__
+			n = print_lld(dst, v.i.n);
+#else
 			n = sprintf(dst, "%lld", v.i.n) ; // ARM (no 80-bit float)
+#endif
 			if (n <= prec) break ;
 			v.f = v.i.n ;
 		    }
@@ -201,9 +276,13 @@ int strhex (VAR v, char *dst, int field)
 	    }
 
 	n = v.i.n ; // copy because v is effectively passed-by-reference
+#ifdef __riscv__
+	return print_llX(dst, n);
+#else
 	if ((liston & BIT2) == 0)
 		n &= 0xFFFFFFFF ;
 	return sprintf(dst, fmt, n) ;
+#endif        
 }
 
 // Multiply by an integer-power of 10:
