@@ -4,22 +4,21 @@
 #include <string.h>
 #include <math.h>
 #include "BBC.h"
-
-#define YEAR    "2023"          // Copyright year
-#define VERSION "1.35a"         // Version string
+#include "version.h"
 
 // From bbccon.h
 extern char *accs;              // String accumulator
 extern char *buff;              // Temporary string buffer
 //extern char* path;              // File path buffer
 #define PAGE_OFFSET ACCSLEN + 0x2000     // Offset of PAGE from memory base
+#undef MAXIMUM_RAM
 #define MAXIMUM_RAM 0x800000    // Maximum amount of RAM to allocate (currently 8MB)
 
 // Global variables (external linkage):
 void *userRAM = NULL;
 void *progRAM = NULL;
 void *userTOP = NULL;
-const char szVersion[] = "BBC BASIC for RISC-V Console "VERSION;
+const char szVersion[] = "BBC BASIC for RISC-V Co Processor "VERSION;
 const char szNotice[] = "(C) Copyright R. T. Russell, "YEAR;
 char *szLoadDir;
 char *szLibrary;
