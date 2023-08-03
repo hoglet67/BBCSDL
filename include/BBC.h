@@ -315,9 +315,8 @@ register signed char *esi asm ("x27") ;	// Program pointer
 register heapptr *esp asm ("x28") ;	// Stack pointer
 #endif
 #ifdef __riscv__
-// TODO: Eventually we should be able to use gp and tp registers
-extern signed char *esi ;		// Program pointer
-extern heapptr *esp ;			// Stack pointer
+register signed char *esi asm ("gp") ;	// Program pointer
+register heapptr *esp asm ("tp") ;	// Stack pointer
 #endif
 #endif
 
