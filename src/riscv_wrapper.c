@@ -10,7 +10,7 @@
 extern char *accs;              // String accumulator
 extern char *buff;              // Temporary string buffer
 //extern char* path;              // File path buffer
-#define PAGE_OFFSET ACCSLEN + 0x2000     // Offset of PAGE from memory base
+#define PAGE_OFFSET ACCSLEN + 0xc00     // Offset of PAGE from memory base
 #undef MAXIMUM_RAM
 #define MAXIMUM_RAM 0x800000    // Maximum amount of RAM to allocate (currently 8MB)
 
@@ -41,7 +41,17 @@ unsigned int rnd(void);        // Return a pseudo-random number
 
 typedef void (*handler_fn_type)(int a0);
 
+extern void error_handler();
 extern void escape_handler();
+
+// Forward Declarations
+unsigned long _osfile(int reason, char *filename, void *block);
+int osargs(int reason, void *chan, void *data);
+void oscli(char *cmd);
+void oswrch(unsigned char vdu);
+void osbput(void *chan, unsigned char byte);
+unsigned char osbget(void *chan, int *peof);
+int osgbpb(int reason, void *block);
 
 heapptr oshwm(void *addr, int settop) {  // Allocate memory above HIMEM
    if ((addr < userRAM) ||(addr > (userRAM + MaximumRAM))) {
@@ -81,7 +91,7 @@ int _main(char *params) {
 
    void* immediate = (void *) 1;
 
-   userRAM = (void *) 0x100000;
+   userRAM = (void *) 0;
    progRAM = userRAM + PAGE_OFFSET; // Will be raised if @cmd$ exceeds 255 bytes
    userTOP = (void *) userRAM + MaximumRAM;
    szCmdLine = progRAM - 0x100;     // Must be immediately below default progRAM
@@ -112,15 +122,18 @@ int _main(char *params) {
          crlf();
       }
 
-   // Install new escape handler
-   void *old_handler;
+   // Install new handlers
+   void *old_error_handler;
+   void *old_escape_handler;
 
-   oshandlers(0xfffe, escape_handler, 0, &old_handler, NULL);
+   oshandlers(0xfffd, error_handler,  0, &old_error_handler,  NULL);
+   oshandlers(0xfffe, escape_handler, 0, &old_escape_handler, NULL);
 
    int ret = basic(progRAM, userTOP, immediate);
 
-   // Restore old escape handler
-   oshandlers(0xfffe, old_handler, 0, NULL, NULL);
+   // Restore old handlers
+   oshandlers(0xfffd, old_error_handler,  0, NULL, NULL);
+   oshandlers(0xfffe, old_escape_handler, 0, NULL, NULL);
 
    return ret;
 }
@@ -187,10 +200,60 @@ long double truncl(long double x) {
 
 // MOS Interface
 
+// returns PPYYXXAA, as expected by USR
+
 int oscall(int addr) {    // Call an emulated OS function
-   text("TODO: oscall");
-   crlf();
-   return 0;
+   char tmp[256];
+   uint32_t a = stavar[1];
+   uint32_t x = stavar[24];
+   uint32_t y = stavar[25];
+   uint32_t ret;
+   int c = 0;
+   sprintf(tmp, "oscall(0x%04x a=%08lx x=%08lx y=%08lx\r\n", addr, a, x, y);
+   text(tmp);
+   switch (addr) {
+   case 0xFFD1:
+      {
+      c = osgbpb(a, (uint32_t *)x);
+      break;
+   }
+   case 0xFFDA:
+      ret = osargs(a, (void *)y, (void *)x);
+      if (a == 0) {
+         a = ret & 0xff;
+      }
+      break;
+   case 0xFFDD:
+      {
+         // On 8-bit MOS, filename is only a two byte thing, so the
+         // best we can do is to remap this assuming the string is
+         // likely to be in the 0x0001xxxx address block. It might
+         // be better to base this on LOMEM.
+         char *filename = (char *)(uint32_t)(0x10000 + *(uint16_t *)x);
+         int ret = _osfile(a, filename, (void *)x + 2);
+         a = ret & 0xff;
+         break;
+      }
+   case 0xFFEE:
+      oswrch(a & 0xff);
+      break;
+   case 0xFFF7:
+      oscli((void *) x);
+      break;
+   case 0xFFCE: text("TODO: emulated osfind() call"); crlf(); break;
+   case 0xFFD4: text("TODO: emulated osbput() call"); crlf(); break;
+   case 0xFFD7: text("TODO: emulated osbget() call"); crlf(); break;
+   case 0xFFE0: text("TODO: emulated osrdch() call"); crlf(); break;
+   case 0xFFE3: text("TODO: emulated osasci() call"); crlf(); break;
+   case 0xFFE7: text("TODO: emulated osnewl() call"); crlf(); break;
+   case 0xFFEC: text("TODO: emulated oswrcr() call"); crlf(); break;
+   case 0xFFF1: text("TODO: emulated osword() call"); crlf(); break;
+   case 0xFFF4: text("TODO: emulated osbyte() call"); crlf(); break;
+   default:
+      text("TODO: unexpected emulated oscall address");
+      crlf();
+   }
+   return (c << 24) + ((y & 0xff) << 16) + ((x & 0xff) << 8) + (a & 0xff);
 }
 
 void oscli(char *cmd) {      // Execute an emulated OS command
@@ -302,18 +365,16 @@ void oswait(int cs) { // Pause for a specified time
    crlf();
 }
 
-
 // MOS - File
 
-
-void osfile(int reason, char *filename, void *load, void *exec, void *start, void *end) {
-   void *block[4] = {load, exec, start, end};
+unsigned long _osfile(int reason, char *filename, void *block) {
    register int   a0 asm ("a0") = reason;
    register void *a1 asm ("a1") = filename;
    register void *a2 asm ("a2") = block;
    register int   a7 asm ("a7") = 7;
    asm volatile ("ecall"
                  : // outputs
+                   "+r"  (a0)
                  : // inputs
                    "r"  (a0),
                    "r"  (a1),
@@ -322,6 +383,12 @@ void osfile(int reason, char *filename, void *load, void *exec, void *start, voi
                  : // clobber
                    "memory"
                  );
+   return a0;
+}
+
+void osfile(int reason, char *filename, void *load, void *exec, void *start, void *end) {
+   void *block[4] = {load, exec, start, end};
+   _osfile(reason, filename, block);
 }
 
 void osload(char *p, void *addr, int max) { // Load a file to memory
@@ -373,22 +440,61 @@ long long geteof(void *chan) {  // Get EOF status
    return 0;
 }
 
-long long getext(void *chan) {  // Get file length
-   text("TODO: getext");
-   crlf();
-   return 0;
+int osargs(int reason, void *chan, void *data) {
+   register int           a0 asm ("a0") = reason;
+   register void         *a1 asm ("a1") = chan;
+   register uint32_t      a2 asm ("a2") = *(uint32_t *)data;
+   register int           a7 asm ("a7") = 8;
+   asm volatile ("ecall"
+                 : // outputs
+                   "+r" (a0),
+                   "+r" (a2)
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a1),
+                   "r"  (a2),
+                   "r"  (a7)
+                 );
+   if (data) {
+      *(uint32_t *)data = a2;
+   }
+   return a0;
 }
 
-void setptr(void *chan, long long ptr) { // Set the file pointer
-   text("TODO: setptr");
-   crlf();
+int osgbpb(int reason, void *block) {
+   register int   a0 asm ("a0") = reason;
+   register void *a1 asm ("a1") = block;
+   register int   a2 asm ("a2") = 0;
+   register int   a7 asm ("a7") = 11;
+   asm volatile ("ecall"
+                 : // outputs
+                   "+r" (a2)
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a1),
+                   "r"  (a7)
+                 : // clobber
+                   "memory"
+                 );
+   return a2 & 1;
 }
 
 long long getptr(void *chan) { // Get file pointer
-   text("TODO: getptr");
-   crlf();
-   return 0;
+   uint32_t ptr = 0;
+   osargs(0, chan, &ptr);
+   return ptr;
 }
+
+void setptr(void *chan, long long ptr) { // Set the file pointer
+   osargs(1, chan, &ptr);
+}
+
+long long getext(void *chan) {  // Get file length
+   uint32_t ext = 0;
+   osargs(2, chan, &ext);
+   return ext;
+}
+
 
 unsigned char osbget(void *chan, int *peof) { // Read a byte from a file
    register int   a0 asm ("a0");
@@ -412,8 +518,16 @@ unsigned char osbget(void *chan, int *peof) { // Read a byte from a file
 }
 
 void osbput(void *chan, unsigned char byte) { // Write a byte to a file
-   text("TODO: osbput");
-   crlf();
+   register int   a0 asm ("a0") = byte;
+   register void *a1 asm ("a1") = chan;
+   register int   a7 asm ("a7") = 10;
+   asm volatile ("ecall"
+                 : // outputs
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a1),
+                   "r"  (a7)
+                 );
 }
 
 
@@ -422,9 +536,9 @@ void osbput(void *chan, unsigned char byte) { // Write a byte to a file
 unsigned int palette[256];
 
 void getcsr(int *px, int *py) { // Get text cursor (caret) coords
-   text("TODO: getcsr");
-   crlf();
-
+   int yyxxaa = osbyte(0x86, 0);
+   *px = (yyxxaa >>  8) & 0xff;
+   *py = (yyxxaa >> 16) & 0xff;
 }
 
 int vgetc(int x, int y) { // Get character at specified coords
@@ -434,9 +548,16 @@ int vgetc(int x, int y) { // Get character at specified coords
 }
 
 int vpoint(int x, int y) { // Get palette index or -1
-   text("TODO: vpoint");
-   crlf();
-   return 0;
+   if (x < -32768 || x > 32767 || y < -32768 || y > 32767) {
+      return -1;
+   } else {
+      int16_t block[3];
+      block[0] = (int16_t) x;
+      block[1] = (int16_t) y;
+      block[2] = 0;
+      osword(9, block);
+      return block[2];
+   }
 }
 
 int vtint(int x, int y) { // Get RGB pixel colour or -1
