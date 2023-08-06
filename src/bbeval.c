@@ -276,11 +276,11 @@ int strhex (VAR v, char *dst, int field)
 	    }
 
 	n = v.i.n ; // copy because v is effectively passed-by-reference
+	if ((liston & BIT2) == 0)
+		n &= 0xFFFFFFFF ;
 #ifdef __riscv__
 	return print_llX(dst, n);
 #else
-	if ((liston & BIT2) == 0)
-		n &= 0xFFFFFFFF ;
 	return sprintf(dst, fmt, n) ;
 #endif        
 }

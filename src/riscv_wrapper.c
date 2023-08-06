@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <ctype.h>
 #include <math.h>
 #include "BBC.h"
 #include "version.h"
@@ -203,14 +204,11 @@ long double truncl(long double x) {
 // returns PPYYXXAA, as expected by USR
 
 int oscall(int addr) {    // Call an emulated OS function
-   char tmp[256];
    uint32_t a = stavar[1];
    uint32_t x = stavar[24];
    uint32_t y = stavar[25];
    uint32_t ret;
    int c = 0;
-   sprintf(tmp, "oscall(0x%04x a=%08lx x=%08lx y=%08lx\r\n", addr, a, x, y);
-   text(tmp);
    switch (addr) {
    case 0xFFD1:
       {
@@ -256,7 +254,140 @@ int oscall(int addr) {    // Call an emulated OS function
    return (c << 24) + ((y & 0xff) << 16) + ((x & 0xff) << 8) + (a & 0xff);
 }
 
+#define NCMDS 3
+#define POWR2 2
+
+static char *cmds[NCMDS] = {
+   "float",
+   "hex",
+   "lowercase"
+};
+
+enum {
+   FLOAT,
+   HEX,
+   LOWERCASE
+};
+
+// Parse ON or OFF:
+static int onoff (char *p)
+{
+	int n = 0 ;
+	if ((*p & 0x5F) == 'O') {
+		p++;
+   }
+	sscanf (p, "%x", &n);
+	return !n;
+}
+
+// Parse / Execute a local command
+static int localcmd(char *cmd) {
+
+   // Borrowed from Richard's bbccli.c, rather overkill for just three commands
+
+   int b = 0;
+   int h = POWR2;
+   int n;
+   char cpy[0x100];
+   char *p;
+   char *q;
+
+   while (*cmd == ' ') cmd++;
+
+   if ((*cmd == 0x0D) || (*cmd == '|'))
+      return 0;
+
+   q = memchr (cmd, 0x0D, sizeof(cpy));
+   if (q == NULL) {
+      error (204, "Bad name");
+   }
+
+   memcpy (cpy, cmd, q - cmd);
+   cpy[q - cmd] = 0;
+   p = cpy;
+   while ((*p = tolower(*p)) != 0) {
+      p++;
+   }
+
+   do {
+      if (((b + h) < NCMDS) && ((strcmp (cpy, cmds[b + h])) >= 0)) {
+         b += h;
+      }
+      h /= 2;
+   }
+   while (h > 0);
+
+   n = strchr(cpy, '.') - cpy;
+   if ((n > 0) && ((b + 1) < NCMDS) && (n <= strlen (cmds[b + 1])) && (strncmp (cpy, cmds[b + 1], n) == 0)) {
+      b++;
+   }
+
+   p = cpy;
+   q = cmds[b];
+   while (*p && *q && (*p == *q)) {
+      p++;
+      q++;
+   }
+
+   if (*p == '.') {
+      p++;
+   } else if (*q) {
+      return 0;
+   }
+
+   p += cmd - cpy;
+   while (*p == ' ') {
+      p++;    // Skip leading spaces
+   }
+
+   switch (b) {
+      case FLOAT:
+         n = 0;
+         sscanf (p, "%i", &n);
+         switch (n) {
+            case 40:
+               liston &= ~(BIT0 + BIT1);
+               break;
+            case 64:
+               liston &= ~BIT1;
+               liston |= BIT0;
+               break;
+            case 80:
+               liston |= (BIT0 + BIT1);
+               break;
+            default:
+               error (254, "Bad command");
+         }
+         return 1;
+      case HEX:
+         n = 0;
+         sscanf (p, "%i", &n);
+         switch (n) {
+            case 32:
+               liston &= ~BIT2;
+               break;
+            case 64:
+               liston |= BIT2;
+               break;
+            default:
+               error (254, "Bad command");
+         }
+         return 1;
+      case LOWERCASE:
+         if (onoff (p)) {
+            liston |= BIT3;
+         } else {
+            liston &= ~BIT3;
+         }
+         return 1;
+   }
+   return 0;
+}
+
 void oscli(char *cmd) {      // Execute an emulated OS command
+   if (localcmd(cmd)) {
+      return;
+   }
    register int a0 asm ("a0") = (int) cmd;
    register int a7 asm ("a7") = 1;
    asm volatile ("ecall"
@@ -287,7 +418,7 @@ void oswrch(unsigned char vdu) {   // Write to display or other output stream (V
 }
 
 unsigned char osrdch(void) { // Get character from console input
-   register int a0 asm ("a0") ;
+   register int a0 asm ("a0");
    register int a7 asm ("a7") = 6;
    asm volatile ("ecall"
                  : // outputs
@@ -677,7 +808,7 @@ void trap(void) { // Test for ESCape
    if (flags & ESCFLG) {
       flags &= ~ESCFLG;  // Clear Basic's escape flag
       osbyte(0x7e, 0);   // Acknowledge ESCape
-      error (17, NULL) ; // 'Escape'
+      error (17, NULL);  // 'Escape'
    }
 }
 
