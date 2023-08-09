@@ -31,7 +31,7 @@ bbeval.o: bbeval.c BBC.h
 	$(CXX) -Wno-array-bounds $(CFLAGS) $< -o $@
 
 # TODO
-bbasmb.o: bbasmb_arm_32.c BBC.h
+bbasmb.o: bbasmb_riscv.c BBC.h
 	$(CXX) $(CFLAGS) $< -o $@
 
 bbdata.o: ../../../BBCSDL/src/bbdata_riscv.s
