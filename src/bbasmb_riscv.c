@@ -89,6 +89,7 @@ static char *mnemonics[] = {
    "or",
    "remu",
    "rem",
+   "ret",
    "sb",
    "sh",
    "slli",
@@ -151,6 +152,7 @@ static uint32_t opcodes[] = {
    0x00006033, // or
    0x02007033, // remu
    0x02006033, // rem
+   0x00008067, // ret      // jalr zero, ra 0
    0x00000023, // sb
    0x00001023, // sh
    0x00001013, // slli
@@ -213,6 +215,7 @@ enum {
    OR,
    REMU,
    REM,
+   RET,
    SB,
    SH,
    SLLI,
@@ -590,6 +593,19 @@ void assemble (void)
                      liston = (liston & 0x0F) | (expri () << 4) ;
                      continue ;
 
+                  case ALIGN:
+                     oldpc = align () ;
+                     if ((nxt() >= '1') && (*esi <= '9'))
+                        {
+                           int n = expri () ;
+                           if ((n & (n - 1)) || (n & 0xFFFFFF03) || (n == 0))
+                              error (16, NULL) ; // 'Syntax error'
+                           instruction = 0xE1A00000 ;
+                           while (stavar[16] & (n - 1))
+                              poke (&instruction, 4) ;
+                        }
+                     continue ;
+
                   case DB:
                      {
                         VAR v = expr () ;
@@ -827,25 +843,15 @@ void assemble (void)
                      }
                      break;
 
+
                   case ECALL:
                   case EBREAK:
+                  case RET:
                      {
                         instruction = opcodes[mnemonic];
                      }
                      break;
 
-                  case ALIGN:
-                     oldpc = align () ;
-                     if ((nxt() >= '1') && (*esi <= '9'))
-                        {
-                           int n = expri () ;
-                           if ((n & (n - 1)) || (n & 0xFFFFFF03) || (n == 0))
-                              error (16, NULL) ; // 'Syntax error'
-                           instruction = 0xE1A00000 ;
-                           while (stavar[16] & (n - 1))
-                              poke (&instruction, 4) ;
-                        }
-                     continue ;
 
                   default:
                      error (16, NULL) ; // 'Syntax error'
