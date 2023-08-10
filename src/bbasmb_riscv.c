@@ -55,6 +55,10 @@ static char *mnemonics[] = {
    "beq",
    "bgeu",
    "bge",
+   "bgtu",
+   "bgt",
+   "bleu",
+   "ble",
    "bltu",
    "blt",
    "bne",
@@ -123,6 +127,10 @@ static uint32_t opcodes[] = {
    0x00000063, // beq
    0x00007063, // bgeu
    0x00005063, // bge
+   0x00006063, // bgtu    (bltu with rs1/2 reversed)
+   0x00004063, // bgt     (blt  with rs1/2 reversed)
+   0x00007063, // bleu    (bgeu with rs1/2 reversed)
+   0x00005063, // ble     (bge  with rs1/2 reversed)
    0x00006063, // bltu
    0x00004063, // blt
    0x00001063, // bne
@@ -191,6 +199,10 @@ enum {
    BEQ,
    BGEU,
    BGE,
+   BGTU,
+   BGT,
+   BLEU,
+   BLE,
    BLTU,
    BLT,
    BNE,
@@ -491,6 +503,7 @@ void assemble (void)
    signed char *oldesi = esi ;
    int init = 1 ;
    void *oldpc = PC ;
+   int swap_rs;
 
    while (1)
       {
@@ -620,6 +633,8 @@ void assemble (void)
 
                if (mnemonic != OPT)
                   init = 0 ;
+
+               swap_rs = 0;
 
                switch (mnemonic)
                   {
@@ -804,6 +819,13 @@ void assemble (void)
                      }
                      break;
 
+                  case BGTU:
+                  case BGT:
+                  case BLEU:
+                  case BLE:
+                     swap_rs = 1;
+                     // fall through to
+
                   case BEQ:
                   case BNE:
                   case BLT:
@@ -811,12 +833,14 @@ void assemble (void)
                   case BLTU:
                   case BGEU:
                      {
+                        int rs1_shift = swap_rs ? 20 : 15;
+                        int rs2_shift = swap_rs ? 15 : 20;
                         // Format B
                         // bne rs1, rs2, target
                         instruction = opcodes[mnemonic];
-                        instruction |= reg() << 15; // rs1
+                        instruction |= reg() << rs1_shift; // rs1 (or rs2 for swapped pseudo forms)
                         comma();
-                        instruction |= reg() << 20; // rs2
+                        instruction |= reg() << rs2_shift; // rs2 (or rs1 for swapped pseudo forms)
                         comma();
                         int dest = ((void *) (size_t) expri () - PC) >> 1 ;
                         if ((dest < -0x800 || dest >= 0x800) && ((liston & BIT5) != 0)) {
