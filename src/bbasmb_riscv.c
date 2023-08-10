@@ -74,6 +74,8 @@ static char *mnemonics[] = {
    "equw",
    "jalr",
    "jal",
+   "jr",
+   "j",
    "lbu",
    "lb",
    "lhu",
@@ -84,6 +86,7 @@ static char *mnemonics[] = {
    "mulsu",
    "mulu",
    "mul",
+   "nop",
    "opt",
    "ori",
    "or",
@@ -137,6 +140,8 @@ static uint32_t opcodes[] = {
    0xffffffff, // equw
    0x00000067, // jalr
    0x0000006f, // jal
+   0x00000067, // jr      (jalr zero, rs, offset)
+   0x0000006f, // j       (jal zero, offset)
    0x00004003, // lbu
    0x00000003, // lb
    0x00005003, // lhu
@@ -147,12 +152,13 @@ static uint32_t opcodes[] = {
    0x02002033, // mulsu
    0x02003033, // mulu
    0x02000033, // mul
+   0x00000013, // nop     (addi zero, zero, 0)
    0xffffffff, // opt
    0x00006013, // ori
    0x00006033, // or
    0x02007033, // remu
    0x02006033, // rem
-   0x00008067, // ret      // jalr zero, ra 0
+   0x00008067, // ret     (jalr zero, ra, 0)
    0x00000023, // sb
    0x00001023, // sh
    0x00001013, // slli
@@ -200,6 +206,8 @@ enum {
    EQUW,
    JALR,
    JAL,
+   JR,
+   J,
    LBU,
    LB,
    LHU,
@@ -210,6 +218,7 @@ enum {
    MULSU,
    MULU,
    MUL,
+   NOP,
    OPT,
    ORI,
    OR,
@@ -383,6 +392,25 @@ static int lookup (char **arr, int num)
    return i ;
 }
 
+static int count_regs () {
+   signed char *old_esi = esi; // save the program pointer
+   int i, n = 0;
+   do {
+      nxt();
+      i = lookup (registers, sizeof(registers) / sizeof(registers[0])) ;
+      if (i < 0) {
+         break; // not a register, so terminate
+      }
+      n++;
+      if (nxt() != ',') {
+         break; // not a comma, so terminate
+      }
+      esi++; // skip over the comma
+   } while (1);
+   esi = old_esi; // restore the program pointer
+   return n;
+}
+
 static unsigned char reg (void)
 {
    int i ;
@@ -402,7 +430,7 @@ static unsigned int imm12(void) {
    long long immediate = expri();
    // immediate is a 12-bit signed
    if (immediate < -0x8000 || immediate >= 0x8000) {
-      error (16, NULL) ; // 'Syntax error'
+      error (17, "imm12 constant out of range");
    }
    return ((unsigned int) immediate) & 0xFFF;
 }
@@ -411,7 +439,7 @@ static unsigned int imm20(void) {
    long long immediate = expri();
    // immediate is a 20-bit signed
    if (immediate < -0x80000 || immediate >= 0x80000) {
-      error (16, NULL) ; // 'Syntax error'
+      error (17, "imm20 constant out of range");
    }
    return ((unsigned int) immediate) & 0xFFFFF;
 }
@@ -710,7 +738,6 @@ void assemble (void)
                   case SRAI:
                   case SLTI:
                   case SLTUI:
-                  case JALR:
                      // Format I
                      // e.g. addi rd, rs1, immediate
                      {
@@ -797,13 +824,22 @@ void assemble (void)
                      }
                      break;
 
+                  case J:
                   case JAL:
                      // Format J
-                     // jal rd, target
+                     // jal rd, imm20
+                     // jal     imm20     (rd default to ra)
+                     // j       imm20     (rd default to 0)
                      {
                         instruction = opcodes[mnemonic];
-                        instruction |= reg() << 7; // rd
-                        comma();
+                        if (count_regs() == 0) {
+                           if (mnemonic == JAL) {
+                              instruction |= 1 << 7; //  rd = ra
+                           }
+                        } else {
+                           instruction |= reg() << 7; // rd
+                           comma();
+                        }
                         int dest = ((void *) (size_t) expri () - PC) >> 1 ;
                         if ((dest < -0x80000 || dest >= 0x80000) && ((liston & BIT5) != 0)) {
                            error (1, NULL) ; // 'Jump out of range'
@@ -816,6 +852,39 @@ void assemble (void)
                         instruction |= ((u >> 12) & 0x0ff) << 12;
                      }
                      break ;
+
+                  case JR:
+                  case JALR:
+                     // Format I
+                     // jalr rd, rs1, imm20
+                     // jalr     rs1, imm20   (rd default to ra)
+                     // jr       rs1          (rd defaults to zero)
+                     // jalr rd, rs1          (imm20 defaults to zero)
+                     // jalr     rs1          (imm20 defaults to zero, rd defaults to ra)
+                     // jr       rs1          (imm20 defaults to zero, rd defaills to zero)
+                     {
+                        instruction = opcodes[mnemonic];
+                        int x = count_regs();
+                        char str[100];
+                        sprintf(str, "count_regs = %d", x);
+                        text(str);
+                        crlf();
+                        if (count_regs() == 1) {
+                           if (mnemonic == JALR) {
+                              instruction |= 1 << 7; //  default rd to ra
+                           }
+                        } else {
+                           instruction |= reg() << 7; // parse rd
+                           comma();
+                        }
+                        instruction |= reg() << 15; // rs1 is the one mandatory part
+                        if (nxt() == ',') {
+                           comma();
+                           instruction |= imm12() << 20; // parse imm12
+                        }
+                     }
+                     break;
+
 
                   case LUI:
                      // Formal U
@@ -847,6 +916,7 @@ void assemble (void)
                   case ECALL:
                   case EBREAK:
                   case RET:
+                  case NOP:
                      {
                         instruction = opcodes[mnemonic];
                      }
