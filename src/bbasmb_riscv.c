@@ -76,6 +76,7 @@ static char *mnemonics[] = {
    "jal",
    "jr",
    "j",
+   "la",
    "lbu",
    "lb",
    "lhu",
@@ -143,11 +144,12 @@ static uint32_t opcodes[] = {
    0x0000006f, // jal
    0x00000067, // jr      (jalr zero, rs, offset)
    0x0000006f, // j       (jal zero, offset)
+   0x00000000, // la      (pseudo)
    0x00004003, // lbu
    0x00000003, // lb
    0x00005003, // lhu
    0x00001003, // lh
-   0x00000000, // li
+   0x00000000, // li      (pseudo)
    0x00000037, // lui
    0x00002003, // lw
    0x02001033, // mulh
@@ -210,6 +212,7 @@ enum {
    JAL,
    JR,
    J,
+   LA,
    LBU,
    LB,
    LHU,
@@ -867,11 +870,6 @@ void assemble (void)
                      // jr       rs1          (imm20 defaults to zero, rd defaills to zero)
                      {
                         instruction = opcodes[mnemonic];
-                        int x = count_regs();
-                        char str[100];
-                        sprintf(str, "count_regs = %d", x);
-                        text(str);
-                        crlf();
                         if (count_regs() == 1) {
                            if (mnemonic == JALR) {
                               instruction |= 1 << 7; //  default rd to ra
@@ -914,6 +912,32 @@ void assemble (void)
                         instruction |= ((unsigned int) dest) << 12; // imm20
                      }
                      break;
+                  case LA:
+                     // Pseudo instruction
+                     // e.g. la rd, target
+                     {
+                        int rd = reg();
+                        comma();
+                        // Calculate the 32-bit offset relative to the current PC
+                        unsigned int imm32 = (unsigned int) expri () - (unsigned int) PC;
+                        // Split into a 20-bit upper and a 12-bit lower
+                        unsigned int imm20 = imm32 >> 12;
+                        unsigned int imm12 = imm32 & 0xfff;
+                        // If the lower is negative then correct the upper by adding one
+                        // (this is because ADDI always sign extends, so need to compensate for this)
+                        if (imm12 & 0x800) {
+                           imm20++;
+                        }
+                        // auipc rd, imm20
+                        instruction = opcodes[AUIPC] | (imm20 << 12) | (rd << 7);
+                        poke(&instruction, 4);
+                        // addi rd, rd, imm12
+                        if (imm12) {
+                           instruction = opcodes[ADDI] | (imm12 << 20) | (rd << 15) | (rd << 7);
+                           poke(&instruction, 4);
+                        }
+                     }
+                     continue ; // n.b. not break
 
                   case LI:
                      // Pseudo instruction
@@ -947,6 +971,7 @@ void assemble (void)
                         }
                      }
                      continue ; // n.b. not break
+
                   case ECALL:
                   case EBREAK:
                   case RET:
