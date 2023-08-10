@@ -80,6 +80,7 @@ static char *mnemonics[] = {
    "lb",
    "lhu",
    "lh",
+   "li",
    "lui",
    "lw",
    "mulh",
@@ -146,6 +147,7 @@ static uint32_t opcodes[] = {
    0x00000003, // lb
    0x00005003, // lhu
    0x00001003, // lh
+   0x00000000, // li
    0x00000037, // lui
    0x00002003, // lw
    0x02001033, // mulh
@@ -212,6 +214,7 @@ enum {
    LB,
    LHU,
    LH,
+   LI,
    LUI,
    LW,
    MULH,
@@ -912,7 +915,38 @@ void assemble (void)
                      }
                      break;
 
-
+                  case LI:
+                     // Pseudo instruction
+                     // e.g. li rd, immediate32
+                     {
+                        int rd = reg();
+                        comma();
+                        unsigned int imm32 = (unsigned int) expri ();
+                        // Split into a 20-bit upper and a 12-bit lower
+                        unsigned int imm20 = imm32 >> 12;
+                        unsigned int imm12 = imm32 & 0xfff;
+                        // If the lower is negative then correct the upper by adding one
+                        // (this is because ADDI always sign extends, so need to compensate for this)
+                        if (imm12 & 0x800) {
+                           imm20++;
+                        }
+                        // Now compose an optimal sequence of lui and/or addi
+                        if (imm20) {
+                           // lui rd, imm20
+                           instruction = opcodes[LUI] | (imm20 << 12) | (rd << 7);
+                           poke(&instruction, 4);
+                           if (imm12) {
+                              // addi rd, rd, imm20
+                              instruction = opcodes[ADDI] | (imm12 << 20) | (rd << 15) | (rd << 7);
+                              poke(&instruction, 4);
+                           }
+                        } else {
+                           // addi rd, zero, imm12
+                           instruction = opcodes[ADDI] | (imm12 << 20) | (rd << 7);
+                           poke(&instruction, 4);
+                        }
+                     }
+                     continue ; // n.b. not break
                   case ECALL:
                   case EBREAK:
                   case RET:
