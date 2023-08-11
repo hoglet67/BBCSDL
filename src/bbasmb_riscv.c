@@ -176,7 +176,9 @@ static char *mnemonics[] = {
    "mulsu",
    "mulu",
    "mul",
+   "mv",
    "nop",
+   "not",
    "opt",
    "ori",
    "or",
@@ -255,7 +257,9 @@ static uint32_t opcodes[] = {
    OP_MULSU,                        // mulsu
    OP_MULU,                         // mulu
    OP_MUL,                          // mul
+   OP_ADDI | F_IMM12_000,           // mv      (addi rd, rs, 0)
    OP_ADDI,                         // nop     (addi zero, zero, 0)
+   OP_XORI | F_IMM12_FFF,           // not     (xori rd, rs, -1)
    OP_BUILTIN,                      // opt
    OP_ORI,                          // ori
    OP_OR,                           // or
@@ -333,7 +337,9 @@ enum {
    MULSU,
    MULU,
    MUL,
+   MV,
    NOP,
+   NOT,
    OPT,
    ORI,
    OR,
@@ -874,14 +880,24 @@ void assemble (void)
                   case SRAI:
                   case SLTI:
                   case SLTUI:
+                  case MV:      // addi rd, rs, 0
+                  case NOT:     // xori rd, rs, -1
                      {
                         // Format I
                         // e.g. addi rd, rs1, immediate
                         instruction |= reg() << RD;
                         comma();
                         instruction |= reg() << RS1;
-                        comma();
-                        instruction |= imm12() << 20;
+                        if (flags & F_IMM12_000) {
+                           // Force a imm12 value of 000 (e.g. for mv)
+                        } else if (flags & F_IMM12_FFF) {
+                           // Force a imm12 value of fff (e.g. for not)
+                           instruction |= 0xFFF00000;
+                        } else {
+                           // Parse an imm12 value
+                           comma();
+                           instruction |= imm12() << 20;
+                        }
                      }
                      break;
 
