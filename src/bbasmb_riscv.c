@@ -199,10 +199,10 @@ static uint32_t opcodes[] = {
    OP_BEQ,               // beq
    OP_BGEU,              // bgeu
    OP_BGE,               // bge
-   OP_BLTU,              // bgtu    (bltu with rs1/2 reversed)
-   OP_BLT,               // bgt     (blt  with rs1/2 reversed)
-   OP_BGEU,              // bleu    (bgeu with rs1/2 reversed)
-   OP_BGE,               // ble     (bge  with rs1/2 reversed)
+   OP_BLTU | REVERSED,   // bgtu    (bltu with rs1/2 reversed)
+   OP_BLT  | REVERSED,   // bgt     (blt  with rs1/2 reversed)
+   OP_BGEU | REVERSED,   // bleu    (bgeu with rs1/2 reversed)
+   OP_BGE  | REVERSED,   // ble     (bge  with rs1/2 reversed)
    OP_BLTU,              // bltu
    OP_BLT,               // blt
    OP_BNE,               // bne
@@ -575,7 +575,8 @@ void assemble (void)
    signed char *oldesi = esi ;
    int init = 1 ;
    void *oldpc = PC ;
-   int swap_rs;
+   int rs1_shift;
+   int rs2_shift;
 
    while (1)
       {
@@ -706,7 +707,22 @@ void assemble (void)
                if (mnemonic != OPT)
                   init = 0 ;
 
-               swap_rs = 0;
+               if (mnemonic < 0) {
+                     error (16, NULL) ; // 'Syntax error'
+                     return; // never reached
+               }
+
+               instruction = opcodes[mnemonic];
+
+               // The reverse flag indicates the source operands should be swapper
+               if (instruction & REVERSED) {
+                  rs1_shift = RS2;
+                  rs2_shift = RS1;
+                  instruction &= ~REVERSED;
+               } else {
+                  rs1_shift = RS1;
+                  rs2_shift = RS2;
+               }
 
                switch (mnemonic)
                   {
@@ -810,15 +826,14 @@ void assemble (void)
                   case DIVU:
                   case REM:
                   case REMU:
-                     // Format R
-                     // e.g. add rd, rs1, rs2
                      {
-                        instruction = opcodes[mnemonic];
-                        instruction |= reg() << 7; // rd
+                        // Format R
+                        // e.g. add rd, rs1, rs2
+                        instruction |= reg() << RD;
                         comma();
-                        instruction |= reg() << 15; // rs1
+                        instruction |= reg() << rs1_shift;
                         comma();
-                        instruction |= reg() << 20; // rs2
+                        instruction |= reg() << rs2_shift;
                      }
                      break;
 
@@ -831,15 +846,14 @@ void assemble (void)
                   case SRAI:
                   case SLTI:
                   case SLTUI:
-                     // Format I
-                     // e.g. addi rd, rs1, immediate
                      {
-                        instruction = opcodes[mnemonic];
-                        instruction |= reg() << 7; // rd
+                        // Format I
+                        // e.g. addi rd, rs1, immediate
+                        instruction |= reg() << RD;
                         comma();
-                        instruction |= reg() << 15; // rs1
+                        instruction |= reg() << RS1;
                         comma();
-                        instruction |= imm12() << 20; // imm12
+                        instruction |= imm12() << 20;
                      }
                      break;
 
@@ -848,18 +862,17 @@ void assemble (void)
                   case LW:
                   case LBU:
                   case LHU:
-                     // Format I
-                     // e.g. lb rd, immediate(rs1)
                      {
-                        instruction = opcodes[mnemonic];
-                        instruction |= reg() << 7; // rd
+                        // Format I
+                        // e.g. lb rd, immediate(rs1)
+                        instruction |= reg() << RD;
                         comma();
-                        instruction |= imm12() << 20; // imm12
+                        instruction |= imm12() << 20;
                         if (nxt () != '(') {
                            error (27, "Missing (") ; // 'Missing ('
                         }
                         esi++ ;
-                        instruction |= reg() << 15; // rs1
+                        instruction |= reg() << RS1;
                         if (nxt () != ')') {
                            error (27, NULL) ; // 'Missing )'
                         }
@@ -870,20 +883,19 @@ void assemble (void)
                   case SB:
                   case SH:
                   case SW:
-                     // Format S
-                     // e.g. sb rs2, immediate(rs1)
                      {
-                        instruction = opcodes[mnemonic];
-                        instruction |= reg() << 20; // rs2
+                        // Format S
+                        // e.g. sb rs2, immediate(rs1)
+                        instruction |= reg() << RS2;
                         comma();
-                        unsigned int u = imm12(); // imm12
+                        unsigned int u = imm12();
                         instruction |= (u & 0x01f) << 7;
                         instruction |= (u & 0xfe0) << 20;
                         if (nxt () != '(') {
                            error (27, "Missing (") ; // 'Missing ('
                         }
                         esi++ ;
-                        instruction |= reg() << 15; // rs1
+                        instruction |= reg() << RS1;
                         if (nxt () != ')') {
                            error (27, NULL) ; // 'Missing )'
                         }
@@ -891,28 +903,22 @@ void assemble (void)
                      }
                      break;
 
-                  case BGTU:
-                  case BGT:
-                  case BLEU:
-                  case BLE:
-                     swap_rs = 1;
-                     // fall through to
-
                   case BEQ:
                   case BNE:
                   case BLT:
                   case BGE:
                   case BLTU:
                   case BGEU:
+                  case BGTU:
+                  case BGT:
+                  case BLEU:
+                  case BLE:
                      {
-                        int rs1_shift = swap_rs ? 20 : 15;
-                        int rs2_shift = swap_rs ? 15 : 20;
                         // Format B
                         // bne rs1, rs2, target
-                        instruction = opcodes[mnemonic];
-                        instruction |= reg() << rs1_shift; // rs1 (or rs2 for swapped pseudo forms)
+                        instruction |= reg() << rs1_shift;
                         comma();
-                        instruction |= reg() << rs2_shift; // rs2 (or rs1 for swapped pseudo forms)
+                        instruction |= reg() << rs2_shift;
                         comma();
                         int dest = ((void *) (size_t) expri () - PC) >> 1 ;
                         if ((dest < -0x800 || dest >= 0x800) && ((liston & BIT5) != 0)) {
@@ -933,13 +939,12 @@ void assemble (void)
                      // jal     imm20     (rd default to ra)
                      // j       imm20     (rd default to 0)
                      {
-                        instruction = opcodes[mnemonic];
                         if (count_regs() == 0) {
                            if (mnemonic == JAL) {
-                              instruction |= 1 << 7; //  rd = ra
+                              instruction |= 1 << RD; //  rd = ra
                            }
                         } else {
-                           instruction |= reg() << 7; // rd
+                           instruction |= reg() << RD;
                            comma();
                         }
                         int dest = ((void *) (size_t) expri () - PC) >> 1 ;
@@ -965,16 +970,15 @@ void assemble (void)
                      // jalr     rs1          (imm20 defaults to zero, rd defaults to ra)
                      // jr       rs1          (imm20 defaults to zero, rd defaills to zero)
                      {
-                        instruction = opcodes[mnemonic];
                         if (count_regs() == 1) {
                            if (mnemonic == JALR) {
-                              instruction |= 1 << 7; //  default rd to ra
+                              instruction |= 1 << RD; //  default rd to ra
                            }
                         } else {
-                           instruction |= reg() << 7; // parse rd
+                           instruction |= reg() << RD; // parse rd
                            comma();
                         }
-                        instruction |= reg() << 15; // rs1 is the one mandatory part
+                        instruction |= reg() << RS1; // rs1 is the one mandatory part
                         if (nxt() == ',') {
                            comma();
                            instruction |= imm12() << 20; // parse imm12
@@ -987,10 +991,9 @@ void assemble (void)
                      // Formal U
                      // e.g. lui rd, immediate
                      {
-                        instruction = opcodes[mnemonic];
-                        instruction |= reg() << 7; // rd
+                        instruction |= reg() << RD;
                         comma();
-                        instruction |= imm20() << 12; // imm20
+                        instruction |= imm20() << 12;
                      }
                      break;
 
@@ -998,8 +1001,7 @@ void assemble (void)
                      // Formal U
                      // e.g. auipc rd, target
                      {
-                        instruction = opcodes[mnemonic];
-                        instruction |= reg() << 7; // rd
+                        instruction |= reg() << RD;
                         comma();
                         int dest = ((void *) (size_t) expri () - PC);
                         if ((dest < -0x80000 || dest >= 0x80000) && ((liston & BIT5) != 0)) {
@@ -1025,11 +1027,11 @@ void assemble (void)
                            imm20++;
                         }
                         // auipc rd, imm20
-                        instruction = opcodes[AUIPC] | (imm20 << 12) | (rd << 7);
+                        instruction = opcodes[AUIPC] | (imm20 << 12) | (rd << RD);
                         poke(&instruction, 4);
                         // addi rd, rd, imm12
                         if (imm12) {
-                           instruction = opcodes[ADDI] | (imm12 << 20) | (rd << 15) | (rd << 7);
+                           instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RS1) | (rd << RD);
                            poke(&instruction, 4);
                         }
                      }
@@ -1053,33 +1055,23 @@ void assemble (void)
                         // Now compose an optimal sequence of lui and/or addi
                         if (imm20) {
                            // lui rd, imm20
-                           instruction = opcodes[LUI] | (imm20 << 12) | (rd << 7);
+                           instruction = opcodes[LUI] | (imm20 << 12) | (rd << RD);
                            poke(&instruction, 4);
                            if (imm12) {
                               // addi rd, rd, imm20
-                              instruction = opcodes[ADDI] | (imm12 << 20) | (rd << 15) | (rd << 7);
+                              instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RS1) | (rd << RD);
                               poke(&instruction, 4);
                            }
                         } else {
                            // addi rd, zero, imm12
-                           instruction = opcodes[ADDI] | (imm12 << 20) | (rd << 7);
+                           instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RD);
                            poke(&instruction, 4);
                         }
                      }
                      continue ; // n.b. not break
 
-                  case ECALL:
-                  case EBREAK:
-                  case RET:
-                  case NOP:
-                     {
-                        instruction = opcodes[mnemonic];
-                     }
-                     break;
-
-
                   default:
-                     error (16, NULL) ; // 'Syntax error'
+                     break;
                   }
 
                oldpc = align () ;
