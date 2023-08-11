@@ -123,15 +123,21 @@ static char *mnemonics[] = {
    "andi",
    "and",
    "auipc",
+   "beqz",
    "beq",
    "bgeu",
+   "bgez",
    "bge",
    "bgtu",
+   "bgtz",
    "bgt",
    "bleu",
+   "blez",
    "ble",
    "bltu",
+   "bltz",
    "blt",
+   "bnez",
    "bne",
    "db",
    "dcb",
@@ -196,15 +202,21 @@ static uint32_t opcodes[] = {
    OP_ANDI,              // andi
    OP_AND,               // and
    OP_AUIPC,             // auipc
+   OP_BEQ,               // beqz
    OP_BEQ,               // beq
    OP_BGEU,              // bgeu
+   OP_BGE,               // bgez
    OP_BGE,               // bge
    OP_BLTU | REVERSED,   // bgtu    (bltu with rs1/2 reversed)
+   OP_BLT  | REVERSED,   // bgtz    (bltz with rs1/2 reversed)
    OP_BLT  | REVERSED,   // bgt     (blt  with rs1/2 reversed)
    OP_BGEU | REVERSED,   // bleu    (bgeu with rs1/2 reversed)
+   OP_BGE  | REVERSED,   // blez    (bgez with rs1/2 reversed)
    OP_BGE  | REVERSED,   // ble     (bge  with rs1/2 reversed)
    OP_BLTU,              // bltu
+   OP_BLT,               // bltz
    OP_BLT,               // blt
+   OP_BNE,               // bnez
    OP_BNE,               // bne
    OP_BUILTIN,           // db
    OP_BUILTIN,           // dcb
@@ -268,15 +280,21 @@ enum {
    ANDI,
    AND,
    AUIPC,
+   BEQZ,
    BEQ,
    BGEU,
+   BGEZ,
    BGE,
    BGTU,
+   BGTZ,
    BGT,
    BLEU,
+   BLEZ,
    BLE,
    BLTU,
+   BLTZ,
    BLT,
+   BNEZ,
    BNE,
    DB,
    DCB,
@@ -714,7 +732,7 @@ void assemble (void)
 
                instruction = opcodes[mnemonic];
 
-               // The reverse flag indicates the source operands should be swapper
+               // The reversed flag indicates the source operands should be swapper
                if (instruction & REVERSED) {
                   rs1_shift = RS2;
                   rs2_shift = RS1;
@@ -913,13 +931,22 @@ void assemble (void)
                   case BGT:
                   case BLEU:
                   case BLE:
+                  case BEQZ:
+                  case BNEZ:
+                  case BLEZ:
+                  case BGEZ:
+                  case BLTZ:
+                  case BGTZ:
                      {
                         // Format B
                         // bne rs1, rs2, target
+                        comma();
                         instruction |= reg() << rs1_shift;
-                        comma();
-                        instruction |= reg() << rs2_shift;
-                        comma();
+                        // Skip parsing of rs2 in "BxxZ" varients (rs2 will default to zero)
+                        if (mnemonic != BEQZ && mnemonic != BNEZ && mnemonic != BLEZ && mnemonic != BGEZ && mnemonic != BLTZ && mnemonic != BGTZ) {
+                           instruction |= reg() << rs2_shift;
+                           comma();
+                        }
                         int dest = ((void *) (size_t) expri () - PC) >> 1 ;
                         if ((dest < -0x800 || dest >= 0x800) && ((liston & BIT5) != 0)) {
                            error (1, NULL) ; // 'Jump out of range'
