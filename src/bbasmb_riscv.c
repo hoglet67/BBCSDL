@@ -114,12 +114,14 @@ void storen (VAR, void *, unsigned char) ;
 #define OP_BUILTIN   0xffffffff
 #define OP_PSEUDO    0x00000000
 
-// Flags are overloaded onto the 32-bit opcode in 19..16 bits that are normally zero
+// Flags support the efficient implementation of many of the pseudo
+// instructions. They are overloaded onto the 32-bit opcode in 19..16
+// bits which are normally zero.
 
-#define F_REVERSED   0x00080000
-#define F_ZERO       0x00040000
-#define F_IMM12_000  0x00020000
-#define F_IMM12_FFF  0x00010000
+#define F_REVERSED   0x00080000 // reverse rs1 and rs2
+#define F_ZERO       0x00040000 // force a zero into rs2 (or rs1 if reversed)
+#define F_IMM12_000  0x00020000 // force imm12 to 000
+#define F_IMM12_FFF  0x00010000 // force imm12 to fff
 
 #define F_CLEAR_MASK 0xFFF0FFFF
 
@@ -177,6 +179,7 @@ static char *mnemonics[] = {
    "mulu",
    "mul",
    "mv",
+   "neg",
    "nop",
    "not",
    "opt",
@@ -258,6 +261,7 @@ static uint32_t opcodes[] = {
    OP_MULU,                         // mulu
    OP_MUL,                          // mul
    OP_ADDI | F_IMM12_000,           // mv      (addi rd, rs, 0)
+   OP_SUB | F_REVERSED | F_ZERO,    // neg     (sub  rd, zero, rs)
    OP_ADDI,                         // nop     (addi zero, zero, 0)
    OP_XORI | F_IMM12_FFF,           // not     (xori rd, rs, -1)
    OP_BUILTIN,                      // opt
@@ -338,6 +342,7 @@ enum {
    MULU,
    MUL,
    MV,
+   NEG,
    NOP,
    NOT,
    OPT,
@@ -860,14 +865,17 @@ void assemble (void)
                   case DIVU:
                   case REM:
                   case REMU:
+                  case NEG:     // sub rd, 0, rs
                      {
                         // Format R
                         // e.g. add rd, rs1, rs2
                         instruction |= reg() << RD;
                         comma();
                         instruction |= reg() << rs1_shift;
-                        comma();
-                        instruction |= reg() << rs2_shift;
+                        if (!(flags & F_ZERO)) {
+                           comma();
+                           instruction |= reg() << rs2_shift;
+                        }
                      }
                      break;
 
