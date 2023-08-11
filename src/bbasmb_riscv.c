@@ -1,4 +1,4 @@
-/*****************************************************************\
+/***************************************************************** \
 *       32-bit BBC BASIC Interpreter                              *
 *       (c) 2018-2021  R.T.Russell  http://www.rtrussell.co.uk/   *
 *                                                                 *
@@ -44,6 +44,77 @@ VAR expr (void) ;
 VAR exprs (void) ;
 VAR loadn (void *, unsigned char) ;
 void storen (VAR, void *, unsigned char) ;
+
+
+// Opcode register positions within 32-bit instruction
+
+#define RD   7
+#define RS1 15
+#define RS2 20
+
+// Opcode constant definitions
+// See:
+
+#define OP_ADD     0x00000033
+#define OP_SUB     0x40000033
+#define OP_XOR     0x00004033
+#define OP_OR      0x00006033
+#define OP_AND     0x00007033
+#define OP_SLL     0x00001033
+#define OP_SRL     0x00005033
+#define OP_SRA     0x40005033
+#define OP_SLT     0x00002033
+#define OP_SLTU    0x00003033
+
+#define OP_ADDI    0x00000013
+#define OP_XORI    0x00004013
+#define OP_ORI     0x00006013
+#define OP_ANDI    0x00007013
+#define OP_SLLI    0x00001013
+#define OP_SRLI    0x00005013
+#define OP_SRAI    0x40005013
+#define OP_SLTI    0x00002013
+#define OP_SLTUI   0x00003013
+
+#define OP_LB      0x00000003
+#define OP_LH      0x00001003
+#define OP_LW      0x00002003
+#define OP_LBU     0x00004003
+#define OP_LHU     0x00005003
+
+#define OP_SB      0x00000023
+#define OP_SH      0x00001023
+#define OP_SW      0x00002023
+
+#define OP_BEQ     0x00000063
+#define OP_BNE     0x00001063
+#define OP_BLT     0x00004063
+#define OP_BGE     0x00005063
+#define OP_BLTU    0x00006063
+#define OP_BGEU    0x00007063
+
+#define OP_JAL     0x0000006f
+#define OP_JALR    0x00000067
+
+#define OP_LUI     0x00000037
+#define OP_AUIPC   0x00000017
+
+#define OP_ECALL   0x00000073
+#define OP_EBREAK  0x00100073
+
+#define OP_MULH    0x02001033
+#define OP_MULSU   0x02002033
+#define OP_MULU    0x02003033
+#define OP_MUL     0x02000033
+#define OP_DIVU    0x02005033
+#define OP_DIV     0x02004033
+#define OP_REMU    0x02007033
+#define OP_REM     0x02006033
+
+#define OP_BUILTIN 0xffffffff
+#define OP_PSEUDO  0x00000000
+
+#define REVERSED   0x80000000
 
 static char *mnemonics[] = {
    "addi",
@@ -117,76 +188,77 @@ static char *mnemonics[] = {
    "xor"
 };
 
+
 static uint32_t opcodes[] = {
-   0x00000013, // addi
-   0x00000033, // add
-   0xffffffff, // align
-   0x00007013, // andi
-   0x00007033, // and
-   0x00000017, // auipc
-   0x00000063, // beq
-   0x00007063, // bgeu
-   0x00005063, // bge
-   0x00006063, // bgtu    (bltu with rs1/2 reversed)
-   0x00004063, // bgt     (blt  with rs1/2 reversed)
-   0x00007063, // bleu    (bgeu with rs1/2 reversed)
-   0x00005063, // ble     (bge  with rs1/2 reversed)
-   0x00006063, // bltu
-   0x00004063, // blt
-   0x00001063, // bne
-   0xffffffff, // db
-   0xffffffff, // dcb
-   0xffffffff, // dcd
-   0xffffffff, // dcs
-   0xffffffff, // dcw
-   0x02005033, // divu
-   0x02004033, // div
-   0x00100073, // ebreak
-   0x00000073, // ecall
-   0xffffffff, // equb
-   0xffffffff, // equd
-   0xffffffff, // equq
-   0xffffffff, // equs
-   0xffffffff, // equw
-   0x00000067, // jalr
-   0x0000006f, // jal
-   0x00000067, // jr      (jalr zero, rs, offset)
-   0x0000006f, // j       (jal zero, offset)
-   0x00000000, // la      (pseudo)
-   0x00004003, // lbu
-   0x00000003, // lb
-   0x00005003, // lhu
-   0x00001003, // lh
-   0x00000000, // li      (pseudo)
-   0x00000037, // lui
-   0x00002003, // lw
-   0x02001033, // mulh
-   0x02002033, // mulsu
-   0x02003033, // mulu
-   0x02000033, // mul
-   0x00000013, // nop     (addi zero, zero, 0)
-   0xffffffff, // opt
-   0x00006013, // ori
-   0x00006033, // or
-   0x02007033, // remu
-   0x02006033, // rem
-   0x00008067, // ret     (jalr zero, ra, 0)
-   0x00000023, // sb
-   0x00001023, // sh
-   0x00001013, // slli
-   0x00001033, // sll
-   0x00002013, // slti
-   0x00003013, // sltui
-   0x00003033, // sltu
-   0x00002033, // slt
-   0x40005013, // srai
-   0x40005033, // sra
-   0x00005013, // srli
-   0x00005033, // srl
-   0x40000033, // sub
-   0x00002023, // sw
-   0x00004013, // xori
-   0x00004033  // xor
+   OP_ADDI,              // addi
+   OP_ADD,               // add
+   OP_BUILTIN,           // align
+   OP_ANDI,              // andi
+   OP_AND,               // and
+   OP_AUIPC,             // auipc
+   OP_BEQ,               // beq
+   OP_BGEU,              // bgeu
+   OP_BGE,               // bge
+   OP_BLTU,              // bgtu    (bltu with rs1/2 reversed)
+   OP_BLT,               // bgt     (blt  with rs1/2 reversed)
+   OP_BGEU,              // bleu    (bgeu with rs1/2 reversed)
+   OP_BGE,               // ble     (bge  with rs1/2 reversed)
+   OP_BLTU,              // bltu
+   OP_BLT,               // blt
+   OP_BNE,               // bne
+   OP_BUILTIN,           // db
+   OP_BUILTIN,           // dcb
+   OP_BUILTIN,           // dcd
+   OP_BUILTIN,           // dcs
+   OP_BUILTIN,           // dcw
+   OP_DIVU,              // divu
+   OP_DIV,               // div
+   OP_EBREAK,            // ebreak
+   OP_ECALL,             // ecall
+   OP_BUILTIN,           // equb
+   OP_BUILTIN,           // equd
+   OP_BUILTIN,           // equq
+   OP_BUILTIN,           // equs
+   OP_BUILTIN,           // equw
+   OP_JALR,              // jalr
+   OP_JAL,               // jal
+   OP_JALR,              // jr      (jalr zero, rs, offset)
+   OP_JAL,               // j       (jal zero, offset)
+   OP_PSEUDO,            // la      (pseudo)
+   OP_LBU,               // lbu
+   OP_LB,                // lb
+   OP_LHU,               // lhu
+   OP_LH,                // lh
+   OP_PSEUDO,            // li      (pseudo)
+   OP_LUI,               // lui
+   OP_LW,                // lw
+   OP_MULH,              // mulh
+   OP_MULSU,             // mulsu
+   OP_MULU,              // mulu
+   OP_MUL,               // mul
+   OP_ADDI,              // nop     (addi zero, zero, 0)
+   OP_BUILTIN,           // opt
+   OP_ORI,               // ori
+   OP_OR,                // or
+   OP_REMU,              // remu
+   OP_REM,               // rem
+   OP_JALR | (1 << RS1), // ret     (jalr zero, ra, 0)
+   OP_SB,                // sb
+   OP_SH,                // sh
+   OP_SLLI,              // slli
+   OP_SLL,               // sll
+   OP_SLTI,              // slti
+   OP_SLTUI,             // sltui
+   OP_SLTU,              // sltu
+   OP_SLT,               // slt
+   OP_SRAI,              // srai
+   OP_SRA,               // sra
+   OP_SRLI,              // srli
+   OP_SRL,               // srl
+   OP_SUB,               // sub
+   OP_SW,                // sw
+   OP_XORI,              // xori
+   OP_XOR                // xor
 };
 
 enum {
