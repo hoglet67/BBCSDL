@@ -115,15 +115,16 @@ void storen (VAR, void *, unsigned char) ;
 #define OP_PSEUDO    0x00000000
 
 // Flags support the efficient implementation of many of the pseudo
-// instructions. They are overloaded onto the 32-bit opcode in 19..16
-// bits which are normally zero.
+// instructions. They are overloaded onto the 32-bit opcode in 31 and
+// 19..16 bits which are normally zero.
 
-#define F_REVERSED   0x00080000 // reverse rs1 and rs2
-#define F_ZERO       0x00040000 // force a zero into rs2 (or rs1 if reversed)
-#define F_IMM12_000  0x00020000 // force imm12 to 000
+#define F_REVERSED   0x80000000 // reverse rs1 and rs2
+#define F_ZERO       0x00080000 // force a zero into rs2 (or rs1 if reversed)
+#define F_IMM12_000  0x00040000 // force imm12 to 000
+#define F_IMM12_001  0x00020000 // force imm12 to 001
 #define F_IMM12_FFF  0x00010000 // force imm12 to fff
 
-#define F_CLEAR_MASK 0xFFF0FFFF
+#define F_CLEAR_MASK 0x7FF0FFFF
 
 static char *mnemonics[] = {
    "addi",
@@ -189,13 +190,17 @@ static char *mnemonics[] = {
    "rem",
    "ret",
    "sb",
+   "seqz",
+   "sgtz",
    "sh",
    "slli",
    "sll",
    "slti",
    "sltui",
    "sltu",
+   "sltz",
    "slt",
+   "snze",
    "srai",
    "sra",
    "srli",
@@ -271,13 +276,17 @@ static uint32_t opcodes[] = {
    OP_REM,                          // rem
    OP_JALR | (1 << RS1),            // ret     (jalr zero, ra, 0)
    OP_SB,                           // sb
+   OP_SLTUI | F_IMM12_001,          // seqz    (sltiu rd, rs, 1)
+   OP_SLT | F_REVERSED | F_ZERO,    // sgtz    (slt   rd, zero, rs)
    OP_SH,                           // sh
    OP_SLLI,                         // slli
    OP_SLL,                          // sll
    OP_SLTI,                         // slti
    OP_SLTUI,                        // sltui
    OP_SLTU,                         // sltu
+   OP_SLT | F_ZERO,                 // sltz    (slt rd, rs, zero)
    OP_SLT,                          // slt
+   OP_SLTU | F_REVERSED | F_ZERO,   // snez    (sltu rd, zero, rs)
    OP_SRAI,                         // srai
    OP_SRA,                          // sra
    OP_SRLI,                         // srli
@@ -352,13 +361,17 @@ enum {
    REM,
    RET,
    SB,
+   SEQZ,
+   SGTZ,
    SH,
    SLLI,
    SLL,
    SLTI,
    SLTUI,
    SLTU,
+   SLTZ,
    SLT,
+   SNEZ,
    SRAI,
    SRA,
    SRLI,
@@ -865,7 +878,10 @@ void assemble (void)
                   case DIVU:
                   case REM:
                   case REMU:
-                  case NEG:     // sub rd, 0, rs
+                  case NEG:     // sub  rd, 0, rs
+                  case SNEZ:    // sltu rd, zero, rs
+                  case SLTZ:    // slt  rd, rs, zero
+                  case SGTZ:    // slt  rd, zero, rs
                      {
                         // Format R
                         // e.g. add rd, rs1, rs2
@@ -890,6 +906,7 @@ void assemble (void)
                   case SLTUI:
                   case MV:      // addi rd, rs, 0
                   case NOT:     // xori rd, rs, -1
+                  case SEQZ:    // sltiu rd, rs, 1
                      {
                         // Format I
                         // e.g. addi rd, rs1, immediate
@@ -898,6 +915,9 @@ void assemble (void)
                         instruction |= reg() << RS1;
                         if (flags & F_IMM12_000) {
                            // Force a imm12 value of 000 (e.g. for mv)
+                        } else if (flags & F_IMM12_001) {
+                           // Force a imm12 value of 000 (e.g. for mv)
+                           instruction |= 0x00100000;
                         } else if (flags & F_IMM12_FFF) {
                            // Force a imm12 value of fff (e.g. for not)
                            instruction |= 0xFFF00000;
@@ -1139,5 +1159,5 @@ void assemble (void)
 
                poke (&instruction, 4) ;
             }
-      } ;
+      }
 }
