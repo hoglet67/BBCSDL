@@ -55,66 +55,73 @@ void storen (VAR, void *, unsigned char) ;
 // Opcode constant definitions
 // See:
 
-#define OP_ADD     0x00000033
-#define OP_SUB     0x40000033
-#define OP_XOR     0x00004033
-#define OP_OR      0x00006033
-#define OP_AND     0x00007033
-#define OP_SLL     0x00001033
-#define OP_SRL     0x00005033
-#define OP_SRA     0x40005033
-#define OP_SLT     0x00002033
-#define OP_SLTU    0x00003033
+#define OP_ADD       0x00000033
+#define OP_SUB       0x40000033
+#define OP_XOR       0x00004033
+#define OP_OR        0x00006033
+#define OP_AND       0x00007033
+#define OP_SLL       0x00001033
+#define OP_SRL       0x00005033
+#define OP_SRA       0x40005033
+#define OP_SLT       0x00002033
+#define OP_SLTU      0x00003033
 
-#define OP_ADDI    0x00000013
-#define OP_XORI    0x00004013
-#define OP_ORI     0x00006013
-#define OP_ANDI    0x00007013
-#define OP_SLLI    0x00001013
-#define OP_SRLI    0x00005013
-#define OP_SRAI    0x40005013
-#define OP_SLTI    0x00002013
-#define OP_SLTUI   0x00003013
+#define OP_ADDI      0x00000013
+#define OP_XORI      0x00004013
+#define OP_ORI       0x00006013
+#define OP_ANDI      0x00007013
+#define OP_SLLI      0x00001013
+#define OP_SRLI      0x00005013
+#define OP_SRAI      0x40005013
+#define OP_SLTI      0x00002013
+#define OP_SLTUI     0x00003013
 
-#define OP_LB      0x00000003
-#define OP_LH      0x00001003
-#define OP_LW      0x00002003
-#define OP_LBU     0x00004003
-#define OP_LHU     0x00005003
+#define OP_LB        0x00000003
+#define OP_LH        0x00001003
+#define OP_LW        0x00002003
+#define OP_LBU       0x00004003
+#define OP_LHU       0x00005003
 
-#define OP_SB      0x00000023
-#define OP_SH      0x00001023
-#define OP_SW      0x00002023
+#define OP_SB        0x00000023
+#define OP_SH        0x00001023
+#define OP_SW        0x00002023
 
-#define OP_BEQ     0x00000063
-#define OP_BNE     0x00001063
-#define OP_BLT     0x00004063
-#define OP_BGE     0x00005063
-#define OP_BLTU    0x00006063
-#define OP_BGEU    0x00007063
+#define OP_BEQ       0x00000063
+#define OP_BNE       0x00001063
+#define OP_BLT       0x00004063
+#define OP_BGE       0x00005063
+#define OP_BLTU      0x00006063
+#define OP_BGEU      0x00007063
 
-#define OP_JAL     0x0000006f
-#define OP_JALR    0x00000067
+#define OP_JAL       0x0000006f
+#define OP_JALR      0x00000067
 
-#define OP_LUI     0x00000037
-#define OP_AUIPC   0x00000017
+#define OP_LUI       0x00000037
+#define OP_AUIPC     0x00000017
 
-#define OP_ECALL   0x00000073
-#define OP_EBREAK  0x00100073
+#define OP_ECALL     0x00000073
+#define OP_EBREAK    0x00100073
 
-#define OP_MULH    0x02001033
-#define OP_MULSU   0x02002033
-#define OP_MULU    0x02003033
-#define OP_MUL     0x02000033
-#define OP_DIVU    0x02005033
-#define OP_DIV     0x02004033
-#define OP_REMU    0x02007033
-#define OP_REM     0x02006033
+#define OP_MULH      0x02001033
+#define OP_MULSU     0x02002033
+#define OP_MULU      0x02003033
+#define OP_MUL       0x02000033
+#define OP_DIVU      0x02005033
+#define OP_DIV       0x02004033
+#define OP_REMU      0x02007033
+#define OP_REM       0x02006033
 
-#define OP_BUILTIN 0xffffffff
-#define OP_PSEUDO  0x00000000
+#define OP_BUILTIN   0xffffffff
+#define OP_PSEUDO    0x00000000
 
-#define REVERSED   0x80000000
+// Flags are overloaded onto the 32-bit opcode in 19..16 bits that are normally zero
+
+#define F_REVERSED   0x00080000
+#define F_ZERO       0x00040000
+#define F_IMM12_000  0x00020000
+#define F_IMM12_FFF  0x00010000
+
+#define F_CLEAR_MASK 0xFFF0FFFF
 
 static char *mnemonics[] = {
    "addi",
@@ -196,81 +203,81 @@ static char *mnemonics[] = {
 
 
 static uint32_t opcodes[] = {
-   OP_ADDI,              // addi
-   OP_ADD,               // add
-   OP_BUILTIN,           // align
-   OP_ANDI,              // andi
-   OP_AND,               // and
-   OP_AUIPC,             // auipc
-   OP_BEQ,               // beqz
-   OP_BEQ,               // beq
-   OP_BGEU,              // bgeu
-   OP_BGE,               // bgez
-   OP_BGE,               // bge
-   OP_BLTU | REVERSED,   // bgtu    (bltu with rs1/2 reversed)
-   OP_BLT  | REVERSED,   // bgtz    (bltz with rs1/2 reversed)
-   OP_BLT  | REVERSED,   // bgt     (blt  with rs1/2 reversed)
-   OP_BGEU | REVERSED,   // bleu    (bgeu with rs1/2 reversed)
-   OP_BGE  | REVERSED,   // blez    (bgez with rs1/2 reversed)
-   OP_BGE  | REVERSED,   // ble     (bge  with rs1/2 reversed)
-   OP_BLTU,              // bltu
-   OP_BLT,               // bltz
-   OP_BLT,               // blt
-   OP_BNE,               // bnez
-   OP_BNE,               // bne
-   OP_BUILTIN,           // db
-   OP_BUILTIN,           // dcb
-   OP_BUILTIN,           // dcd
-   OP_BUILTIN,           // dcs
-   OP_BUILTIN,           // dcw
-   OP_DIVU,              // divu
-   OP_DIV,               // div
-   OP_EBREAK,            // ebreak
-   OP_ECALL,             // ecall
-   OP_BUILTIN,           // equb
-   OP_BUILTIN,           // equd
-   OP_BUILTIN,           // equq
-   OP_BUILTIN,           // equs
-   OP_BUILTIN,           // equw
-   OP_JALR,              // jalr
-   OP_JAL,               // jal
-   OP_JALR,              // jr      (jalr zero, rs, offset)
-   OP_JAL,               // j       (jal zero, offset)
-   OP_PSEUDO,            // la      (pseudo)
-   OP_LBU,               // lbu
-   OP_LB,                // lb
-   OP_LHU,               // lhu
-   OP_LH,                // lh
-   OP_PSEUDO,            // li      (pseudo)
-   OP_LUI,               // lui
-   OP_LW,                // lw
-   OP_MULH,              // mulh
-   OP_MULSU,             // mulsu
-   OP_MULU,              // mulu
-   OP_MUL,               // mul
-   OP_ADDI,              // nop     (addi zero, zero, 0)
-   OP_BUILTIN,           // opt
-   OP_ORI,               // ori
-   OP_OR,                // or
-   OP_REMU,              // remu
-   OP_REM,               // rem
-   OP_JALR | (1 << RS1), // ret     (jalr zero, ra, 0)
-   OP_SB,                // sb
-   OP_SH,                // sh
-   OP_SLLI,              // slli
-   OP_SLL,               // sll
-   OP_SLTI,              // slti
-   OP_SLTUI,             // sltui
-   OP_SLTU,              // sltu
-   OP_SLT,               // slt
-   OP_SRAI,              // srai
-   OP_SRA,               // sra
-   OP_SRLI,              // srli
-   OP_SRL,               // srl
-   OP_SUB,               // sub
-   OP_SW,                // sw
-   OP_XORI,              // xori
-   OP_XOR                // xor
+   OP_ADDI,                         // addi
+   OP_ADD,                          // add
+   OP_BUILTIN,                      // align
+   OP_ANDI,                         // andi
+   OP_AND,                          // and
+   OP_AUIPC,                        // auipc
+   OP_BEQ | F_ZERO,                 // beqz
+   OP_BEQ,                          // beq
+   OP_BGEU,                         // bgeu
+   OP_BGE | F_ZERO,                 // bgez
+   OP_BGE,                          // bge
+   OP_BLTU | F_REVERSED,            // bgtu    (bltu with rs1/2 reversed)
+   OP_BLT  | F_REVERSED | F_ZERO,   // bgtz    (bltz with rs1/2 reversed)
+   OP_BLT  | F_REVERSED,            // bgt     (blt  with rs1/2 reversed)
+   OP_BGEU | F_REVERSED,            // bleu    (bgeu with rs1/2 reversed)
+   OP_BGE  | F_REVERSED | F_ZERO,   // blez    (bgez with rs1/2 reversed)
+   OP_BGE  | F_REVERSED,            // ble     (bge  with rs1/2 reversed)
+   OP_BLTU,                         // bltu
+   OP_BLT | F_ZERO,                 // bltz
+   OP_BLT,                          // blt
+   OP_BNE | F_ZERO,                 // bnez
+   OP_BNE,                          // bne
+   OP_BUILTIN,                      // db
+   OP_BUILTIN,                      // dcb
+   OP_BUILTIN,                      // dcd
+   OP_BUILTIN,                      // dcs
+   OP_BUILTIN,                      // dcw
+   OP_DIVU,                         // divu
+   OP_DIV,                          // div
+   OP_EBREAK,                       // ebreak
+   OP_ECALL,                        // ecall
+   OP_BUILTIN,                      // equb
+   OP_BUILTIN,                      // equd
+   OP_BUILTIN,                      // equq
+   OP_BUILTIN,                      // equs
+   OP_BUILTIN,                      // equw
+   OP_JALR,                         // jalr
+   OP_JAL,                          // jal
+   OP_JALR,                         // jr      (jalr zero, rs, offset)
+   OP_JAL,                          // j       (jal zero, offset)
+   OP_PSEUDO,                       // la      (pseudo)
+   OP_LBU,                          // lbu
+   OP_LB,                           // lb
+   OP_LHU,                          // lhu
+   OP_LH,                           // lh
+   OP_PSEUDO,                       // li      (pseudo)
+   OP_LUI,                          // lui
+   OP_LW,                           // lw
+   OP_MULH,                         // mulh
+   OP_MULSU,                        // mulsu
+   OP_MULU,                         // mulu
+   OP_MUL,                          // mul
+   OP_ADDI,                         // nop     (addi zero, zero, 0)
+   OP_BUILTIN,                      // opt
+   OP_ORI,                          // ori
+   OP_OR,                           // or
+   OP_REMU,                         // remu
+   OP_REM,                          // rem
+   OP_JALR | (1 << RS1),            // ret     (jalr zero, ra, 0)
+   OP_SB,                           // sb
+   OP_SH,                           // sh
+   OP_SLLI,                         // slli
+   OP_SLL,                          // sll
+   OP_SLTI,                         // slti
+   OP_SLTUI,                        // sltui
+   OP_SLTU,                         // sltu
+   OP_SLT,                          // slt
+   OP_SRAI,                         // srai
+   OP_SRA,                          // sra
+   OP_SRLI,                         // srli
+   OP_SRL,                          // srl
+   OP_SUB,                          // sub
+   OP_SW,                           // sw
+   OP_XORI,                         // xori
+   OP_XOR                           // xor
 };
 
 enum {
@@ -595,6 +602,7 @@ void assemble (void)
    void *oldpc = PC ;
    int rs1_shift;
    int rs2_shift;
+   unsigned int flags;
 
    while (1)
       {
@@ -730,17 +738,19 @@ void assemble (void)
                      return; // never reached
                }
 
-               instruction = opcodes[mnemonic];
+               instruction  = opcodes[mnemonic];
+               flags        = instruction;
+               instruction &= F_CLEAR_MASK;
 
                // The reversed flag indicates the source operands should be swapper
-               if (instruction & REVERSED) {
+               if (flags & F_REVERSED) {
                   rs1_shift = RS2;
                   rs2_shift = RS1;
-                  instruction &= ~REVERSED;
                } else {
                   rs1_shift = RS1;
                   rs2_shift = RS2;
                }
+
 
                switch (mnemonic)
                   {
@@ -943,7 +953,7 @@ void assemble (void)
                         comma();
                         instruction |= reg() << rs1_shift;
                         // Skip parsing of rs2 in "BxxZ" varients (rs2 will default to zero)
-                        if (mnemonic != BEQZ && mnemonic != BNEZ && mnemonic != BLEZ && mnemonic != BGEZ && mnemonic != BLTZ && mnemonic != BGTZ) {
+                        if (!(flags & F_ZERO)) {
                            instruction |= reg() << rs2_shift;
                            comma();
                         }
