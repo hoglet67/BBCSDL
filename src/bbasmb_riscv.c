@@ -149,6 +149,7 @@ static char *mnemonics[] = {
    "blt",
    "bnez",
    "bne",
+   "call",
    "db",
    "dcb",
    "dcd",
@@ -207,6 +208,7 @@ static char *mnemonics[] = {
    "srl",
    "sub",
    "sw",
+   "tail",
    "xori",
    "xor"
 };
@@ -235,6 +237,7 @@ static uint32_t opcodes[] = {
    OP_BLT,                          // blt
    OP_BNE | F_ZERO,                 // bnez
    OP_BNE,                          // bne
+   OP_PSEUDO,                       // call
    OP_BUILTIN,                      // db
    OP_BUILTIN,                      // dcb
    OP_BUILTIN,                      // dcd
@@ -293,6 +296,7 @@ static uint32_t opcodes[] = {
    OP_SRL,                          // srl
    OP_SUB,                          // sub
    OP_SW,                           // sw
+   OP_PSEUDO,                       // tail
    OP_XORI,                         // xori
    OP_XOR                           // xor
 };
@@ -320,6 +324,7 @@ enum {
    BLT,
    BNEZ,
    BNE,
+   CALL,
    DB,
    DCB,
    DCD,
@@ -378,6 +383,7 @@ enum {
    SRL,
    SUB,
    SW,
+   TAIL,
    XORI,
    XOR
 };
@@ -1092,11 +1098,22 @@ void assemble (void)
                      }
                      break;
                   case LA:
+                  case CALL:
+                  case TAIL:
                      // Pseudo instruction
-                     // e.g. la rd, target
+                     // e.g. la   rd, target
+                     //      call rd, target
+                     //      tail rd, target
+                     //      call     target (rd defaults to ra)
+                     //      tail     target (rd defaults to t1)
                      {
-                        int rd = reg();
-                        comma();
+                        int rd;
+                        if (mnemonic == LA || count_regs() > 0) {
+                           rd = reg();
+                           comma();
+                        } else {
+                           rd = (mnemonic == CALL) ? 1 : 6;
+                        }
                         // Calculate the 32-bit offset relative to the current PC
                         unsigned int imm32 = (unsigned int) expri () - (unsigned int) PC;
                         // Split into a 20-bit upper and a 12-bit lower
@@ -1110,9 +1127,15 @@ void assemble (void)
                         // auipc rd, imm20
                         instruction = opcodes[AUIPC] | (imm20 << 12) | (rd << RD);
                         poke(&instruction, 4);
-                        // addi rd, rd, imm12
-                        if (imm12) {
-                           instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RS1) | (rd << RD);
+                        if (mnemonic == LA) {
+                           // addi rd, rd, imm12
+                           if (imm12) {
+                              instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RS1) | (rd << RD);
+                              poke(&instruction, 4);
+                           }
+                        } else {
+                           // jalr rd, rd, imm12
+                           instruction = opcodes[JALR] | (imm12 << 20) | (rd << RS1) | (rd << RD);
                            poke(&instruction, 4);
                         }
                      }
