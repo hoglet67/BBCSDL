@@ -294,7 +294,7 @@ static int localcmd(char *cmd) {
 
    while (*cmd == ' ') cmd++;
 
-   if ((*cmd == 0x0D) || (*cmd == '|'))
+   if ((*cmd == 0x0D) || (*cmd == '|') || (*cmd == '.'))
       return 0;
 
    q = memchr (cmd, 0x0D, sizeof(cpy));
