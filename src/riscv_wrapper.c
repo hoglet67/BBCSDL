@@ -46,13 +46,17 @@ extern void error_handler();
 extern void escape_handler();
 
 // Forward Declarations
+unsigned char osrdch(void);
 unsigned long _osfile(int reason, char *filename, void *block);
+void * _osfind(int a, char *p);
 int osargs(int reason, void *chan, void *data);
 void oscli(char *cmd);
 void oswrch(unsigned char vdu);
 void osbput(void *chan, unsigned char byte);
 unsigned char osbget(void *chan, int *peof);
 int osgbpb(int reason, void *block);
+int osbyte(int al, int xy);
+void osword(int al, void *xy);
 
 heapptr oshwm(void *addr, int settop) {  // Allocate memory above HIMEM
    if ((addr < userRAM) ||(addr > (userRAM + MaximumRAM))) {
@@ -209,12 +213,42 @@ int oscall(int addr) {    // Call an emulated OS function
    uint32_t y = stavar[25];
    uint32_t ret;
    int c = 0;
+   // Heuristic to determine 32-bit block address
+   //
+   // The call pattern is likely to be either
+   //
+   // X% = block
+   // Y% = block DIV 256
+   // CALL osword
+   //
+   // X% = block MOD 256
+   // Y% = block DIV 256
+   // CALL osword
+   //
+   uint32_t block = x;
+   if (block < 256) {
+      block |= (y << 8);
+   }
    switch (addr) {
+   case 0xFFCE:
+      if (a) {
+         // Open file
+         a = ((uint32_t)_osfind(a, (void *)block)) & 0xff; // filename in xy
+      } else {
+         // Close file
+         _osfind(a, (void *)y); // handle in y
+      }
+      break;
    case 0xFFD1:
-      {
       c = osgbpb(a, (uint32_t *)x);
       break;
-   }
+   case 0xFFD4:
+      osbput((void *)y, a);
+      break;
+   case 0xFFD7:
+      a = osbget((void *) y, &c); // return -1 in c for EOF, otherwise 0
+      c = c ? 1 : 0; // map EOF to C=1
+      break;
    case 0xFFDA:
       ret = osargs(a, (void *)y, (void *)x);
       if (a == 0) {
@@ -225,28 +259,44 @@ int oscall(int addr) {    // Call an emulated OS function
       {
          // On 8-bit MOS, filename is only a two byte thing, so the
          // best we can do is to remap this assuming the string is
-         // likely to be in the 0x0001xxxx address block. It might
-         // be better to base this on LOMEM.
-         char *filename = (char *)(uint32_t)(0x10000 + *(uint16_t *)x);
+         // likely to be in the same 64K address range as the
+         // control.
+         char *filename = (char *)((x & 0xffff0000) + *(uint16_t *)x);
          int ret = _osfile(a, filename, (void *)x + 2);
          a = ret & 0xff;
          break;
       }
+   case 0xFFE0:
+      a = osrdch();
+      // TODO: need to set C on escape
+      break;
+   case 0xFFE3:
+      if (a == 13) {
+         oswrch(10);
+      }
+      oswrch(a);
+      break;
+   case 0xFFE7:
+      oswrch(10);
+      oswrch(13);
+      break;
+   case 0xFFEC:
+      oswrch(13);
+      break;
    case 0xFFEE:
       oswrch(a & 0xff);
+      break;
+   case 0xFFF1:
+      osword(a, (void *)block);
+      break;
+   case 0xFFF4:
+      int yyxxaa = osbyte(a, (y << 8) | x);
+      x = (yyxxaa >> 8) & 0xff;
+      y = (yyxxaa >> 16) & 0xff;
       break;
    case 0xFFF7:
       oscli((void *) x);
       break;
-   case 0xFFCE: text("TODO: emulated osfind() call"); crlf(); break;
-   case 0xFFD4: text("TODO: emulated osbput() call"); crlf(); break;
-   case 0xFFD7: text("TODO: emulated osbget() call"); crlf(); break;
-   case 0xFFE0: text("TODO: emulated osrdch() call"); crlf(); break;
-   case 0xFFE3: text("TODO: emulated osasci() call"); crlf(); break;
-   case 0xFFE7: text("TODO: emulated osnewl() call"); crlf(); break;
-   case 0xFFEC: text("TODO: emulated oswrcr() call"); crlf(); break;
-   case 0xFFF1: text("TODO: emulated osword() call"); crlf(); break;
-   case 0xFFF4: text("TODO: emulated osbyte() call"); crlf(); break;
    default:
       text("TODO: unexpected emulated oscall address");
       crlf();
@@ -400,9 +450,12 @@ void oscli(char *cmd) {      // Execute an emulated OS command
 }
 
 int oskey(int wait) {     // Wait for character or test key
-   text("TODO: oskey");
-   crlf();
-   return 0;
+   int yyxxaa = osbyte(0x81, wait);
+   if (yyxxaa >> 16) {
+      return -1;
+   } else {
+      return (yyxxaa >> 8) & 0xff;
+   }
 }
 
 void oswrch(unsigned char vdu) {   // Write to display or other output stream (VDU)
@@ -491,12 +544,23 @@ void osword(int al, void *xy) {
                  );
 }
 
-void oswait(int cs) { // Pause for a specified time
-   text("TODO: oswait");
-   crlf();
+// MOS - File
+
+void * _osfind(int a, char *p) {
+   register int   a0 asm ("a0") = a;
+   register void *a1 asm ("a1") = p;
+   register int   a7 asm ("a7") = 12;
+   asm volatile ("ecall"
+                 : // outputs
+                   "+r" (a0)
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a1),
+                   "r"  (a7)
+                 );
+   return (void *) a0;
 }
 
-// MOS - File
 
 unsigned long _osfile(int reason, char *filename, void *block) {
    register int   a0 asm ("a0") = reason;
@@ -530,45 +594,30 @@ void ossave(char *p, void *addr, int len) { // Save a file from memory
    osfile(0, p, NULL, NULL, addr, addr + len);
 }
 
+
 void *osopen(int type, char *p) { // Open a file
-   register int   a0 asm ("a0");
-   register void *a1 asm ("a1") = p;
-   register int   a7 asm ("a7") = 12;
 	if (type == 0) {
-      a0 = 0x40; // input only
+      return _osfind(0x40, p); // input only
    } else if (type == 1) {
-      a0 = 0x80; // output only
+      return _osfind(0x80, p); // output only
    } else {
-      a0 = 0xc0; // update (random access)
+      return _osfind(0xc0, p); // update (random access)
    }
-   asm volatile ("ecall"
-                 : // outputs
-                   "+r" (a0)
-                 : // inputs
-                   "r"  (a0),
-                   "r"  (a1),
-                   "r"  (a7)
-                 );
-   return (void *) a0;
 }
 
 void osshut(void *chan) { // Close file(s)
-   register int   a0 asm ("a0") = 0;
-   register void *a1 asm ("a1") = chan;
-   register int   a7 asm ("a7") = 12;
-   asm volatile ("ecall"
-                 : // outputs
-                 : // inputs
-                   "r"  (a0),
-                   "r"  (a1),
-                   "r"  (a7)
-                 );
+   _osfind(0x00, chan);
 }
 
 long long geteof(void *chan) {  // Get EOF status
-   text("TODO: geteof");
-   crlf();
-   return 0;
+   int yyxxaa = osbyte(0x7F, (int) chan);
+   if (yyxxaa & 0x00FF00) {
+      // EOF
+      return -1; // TRUE
+   } else {
+      // not EOF
+      return 0;  // FALSE
+   }
 }
 
 int osargs(int reason, void *chan, void *data) {
@@ -640,9 +689,9 @@ unsigned char osbget(void *chan, int *peof) { // Read a byte from a file
                  );
    if (peof) {
       if (a0 < 0) {
-         *peof = -1;
+         *peof = -1; // TRUE
       } else {
-         *peof = 0;
+         *peof = 0; // FALSE
       }
    }
    return (unsigned char) a0;
@@ -761,10 +810,22 @@ int getime(void) {     // Return centisecond count
    return block[0];
 }
 
+void oswait(int cs) { // Pause for a specified time
+   int time = getime();
+   while (getime() < time + cs);
+}
+
+
 int getims(void) {     // Get clock time string to accs
-   text("TODO: getims");
-   crlf();
-   return 0;
+   accs[0] = 0;
+   osword(14, accs);
+   if (accs[0]) {
+      accs[24] = 13;
+      return 24;
+   } else {
+      strcpy(accs, "Not Implemented\n");
+      return 15;
+   }
 }
 
 // MOS - Misc
