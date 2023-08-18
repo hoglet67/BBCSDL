@@ -4,8 +4,10 @@ BASE=riscv32-unknown-elf-
 ARCH=rv32im_zicsr
 ABI=ilp32
 
-CXX = ${BASE}gcc
-AS  = ${BASE}as
+CXX     = ${BASE}gcc
+AS      = ${BASE}as
+STRIP   = ${BASE}strip
+OBJCOPY = ${BASE}objcopy
 
 OBJ = crt0.o riscv_wrapper.o bbmain.o bbexec.o bbeval.o bbdata.o bbasmb.o
 
@@ -13,7 +15,7 @@ ASFLAGS = -I ../../include -march=${ARCH} -mabi=${ABI}
 CFLAGS  = --specs=nano.specs -u _printf_float -Wall -I ../../include -march=${ARCH} -mabi=${ABI} -c -Os
 LDFLAGS = --specs=nano.specs -u _printf_float -lm -nostartfiles -Tbbcbasic.ld  -Os
 
-all: bbcbasic
+all: rvbasic.ssd
 
 crt0.o: crt0.s
 	$(AS) $(ASFLAGS) $< -o $@
@@ -39,7 +41,18 @@ bbdata.o: ../../../BBCSDL/src/bbdata_riscv.s
 
 bbcbasic: $(OBJ)
 	$(CXX) $(OBJ) $(LDFLAGS) -o bbcbasic
-	cp bbcbasic ../../
+
+RVBASIC: bbcbasic
+	$(OBJCOPY) -O binary $< $@
+
+rvbasic.ssd: RVBASIC
+	rm -f $@
+	beeb blank_ssd $@
+	beeb title $@ "RISC-V BASIC"
+	beeb putfile $@ $<
+	beeb putfile $@ examples/*
+	beeb opt4 $@ 3
+	beeb info $@
 
 clean:
-	rm -f $(OBJ)
+	rm -f $(OBJ) bbcbasic RVBASIC rvbasic.ssd
