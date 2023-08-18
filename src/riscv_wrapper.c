@@ -350,23 +350,32 @@ static int _osrdch(void) { // Get character from console input
    return a0;
 }
 
-static int _osbyte(int al, int xy) {
+static void _osbyte(int al, int *x, int *y, int *c) {
    register int a0 asm ("a0") = al;
-   register int a1 asm ("a1") = xy & 0xFF;
-   register int a2 asm ("a2") = (xy >> 8) & 0xFF;
+   register int a1 asm ("a1") = x ? (*x) : 0;
+   register int a2 asm ("a2") = y ? (*y) : 0;
+   register int a3 asm ("a3");
    register int a7 asm ("a7") = 2;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a1),
-                   "+r" (a2)
+                   "+r" (a2),
+                   "+r" (a3)
                  : // inputs
                    "r"  (a0),
                    "r"  (a1),
                    "r"  (a2),
                    "r"  (a7)
                  );
-   // Return 00 YY XX AA in an integer
-   return a0 + ((a1 & 0xff) << 8) + ((a2 & 0xff) << 16);
+   if (x) {
+      *x = a1;
+   }
+   if (y) {
+      *y = a2;
+   }
+   if (c) {
+      *c = a3;
+   }
 }
 
 static int _osword(int al, void *xy) {
@@ -516,10 +525,10 @@ static void _oscli(char *cmd) {      // Execute an emulated OS command
 
 // returns PPYYXXAA, as expected by USR
 int oscall(int addr) {    // Call an emulated OS function
-   uint32_t a = stavar[1];
-   uint32_t x = stavar[24];
-   uint32_t y = stavar[25];
-   uint32_t ret;
+   int a = stavar[1];
+   int x = stavar[24];
+   int y = stavar[25];
+   int ret;
    int c = 0;
    // Heuristic to determine 32-bit block address
    //
@@ -600,9 +609,7 @@ int oscall(int addr) {    // Call an emulated OS function
       _osword(a, (void *)block);
       break;
    case 0xFFF4:
-      int yyxxaa = _osbyte(a, (y << 8) | x);
-      x = (yyxxaa >> 8) & 0xff;
-      y = (yyxxaa >> 16) & 0xff;
+      _osbyte(a, &x, &y, &c);
       break;
    case 0xFFF7:
       _oscli((void *) x);
@@ -611,7 +618,7 @@ int oscall(int addr) {    // Call an emulated OS function
       text("TODO: unexpected emulated oscall address");
       crlf();
    }
-   return (c << 24) + ((y & 0xff) << 16) + ((x & 0xff) << 8) + (a & 0xff);
+   return ((c & 0x01) << 24) + ((y & 0xff) << 16) + ((x & 0xff) << 8) + (a & 0xff);
 }
 
 void oscli(char *cmd) {      // Execute an emulated OS
@@ -619,11 +626,13 @@ void oscli(char *cmd) {      // Execute an emulated OS
 }
 
 int oskey(int wait) {     // Wait for character or test key
-   int yyxxaa = _osbyte(0x81, wait);
-   if (yyxxaa >> 16) {
+   int x = wait & 0xff;
+   int y = (wait >> 8) & 0xff;
+   _osbyte(0x81, &x, &y, NULL);
+   if (y) {
       return -1;
    } else {
-      return (yyxxaa >> 8) & 0xff;
+      return x & 0xff;
    }
 }
 
@@ -646,14 +655,6 @@ void osline(char *buffer) {     // Get a line of console input
    if (ret < 0) {
       *buffer = 0x0D;
    }
-}
-
-int osbyte(int al, int xy) {
-   return _osbyte(al, xy);
-}
-
-void osword(int al, void *xy) {
-   _osword(al, xy);
 }
 
 // MOS - File
@@ -686,22 +687,15 @@ void osshut(void *chan) { // Close file(s)
 }
 
 long long geteof(void *chan) {  // Get EOF status
-   int yyxxaa = _osbyte(0x7F, (int) chan);
-   if (yyxxaa & 0x00FF00) {
+   int x = (int) chan;
+   _osbyte(0x7F, &x, NULL, NULL);
+   if (x) {
       // EOF
       return -1; // TRUE
    } else {
       // not EOF
       return 0;  // FALSE
    }
-}
-
-int osargs(int reason, void *chan, void *data) {
-   return _osargs(reason, chan, data);
-}
-
-int osgbpb(int reason, void *block) {
-   return _osgbpb(reason, block);
 }
 
 long long getptr(void *chan) { // Get file pointer
@@ -720,7 +714,6 @@ long long getext(void *chan) {  // Get file length
    return ext;
 }
 
-
 unsigned char osbget(void *chan, int *peof) { // Read a byte from a file
    return _osbget(chan, peof);
 }
@@ -729,15 +722,12 @@ void osbput(void *chan, unsigned char byte) { // Write a byte to a file
    _osbput(chan, byte);
 }
 
-
 // MOS - Graphics
 
 unsigned int palette[256];
 
 void getcsr(int *px, int *py) { // Get text cursor (caret) coords
-   int yyxxaa = _osbyte(0x86, 0);
-   *px = (yyxxaa >>  8) & 0xff;
-   *py = (yyxxaa >> 16) & 0xff;
+   _osbyte(0x86, px, py, NULL);
 }
 
 int vgetc(int x, int y) { // Get character at specified coords
@@ -850,8 +840,9 @@ int getims(void) {     // Get clock time string to accs
 // MOS - Misc
 
 int adval(int n) {    // ADVAL function
-   int yyxxaa = _osbyte(128, n);
-   return yyxxaa >> 8;
+   int x = n;
+   _osbyte(128, &x, NULL, NULL);
+   return x;
 }
 
 void faterr(const char *msg) {  // Report a 'fatal' error message
@@ -887,7 +878,7 @@ void *sysadr(char *) { // Get the address of an API function
 void trap(void) { // Test for ESCape
    if (flags & ESCFLG) {
       flags &= ~ESCFLG;  // Clear Basic's escape flag
-      _osbyte(0x7e, 0);   // Acknowledge ESCape
+      _osbyte(0x7e, NULL, NULL, NULL); // Acknowledge ESCape
       error (17, NULL);  // 'Escape'
    }
 }
