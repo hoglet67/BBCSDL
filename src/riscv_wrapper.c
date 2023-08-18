@@ -12,8 +12,6 @@ extern char *accs;              // String accumulator
 extern char *buff;              // Temporary string buffer
 //extern char* path;              // File path buffer
 #define PAGE_OFFSET ACCSLEN + 0xc00     // Offset of PAGE from memory base
-#undef MAXIMUM_RAM
-#define MAXIMUM_RAM 0x800000    // Maximum amount of RAM to allocate (currently 8MB)
 
 // Global variables (external linkage):
 void *userRAM = NULL;
@@ -26,7 +24,7 @@ char *szLibrary;
 char *szUserDir;
 char *szTempDir;
 char *szCmdLine;
-int MaximumRAM = MAXIMUM_RAM;
+static int MaximumRAM = 0;
 //timer_t UserTimerID;
 unsigned int palette[256];
 
@@ -44,6 +42,7 @@ typedef void (*handler_fn_type)(int a0);
 
 extern void error_handler();
 extern void escape_handler();
+static void _osbyte(int al, int *x, int *y, int *c);
 
 heapptr oshwm(void *addr, int settop) {  // Allocate memory above HIMEM
    if ((addr < userRAM) ||(addr > (userRAM + MaximumRAM))) {
@@ -83,9 +82,14 @@ int _main(char *params) {
 
    void* immediate = (void *) 1;
 
-   userRAM = (void *) 0;
+   _osbyte(0x83, (int *)&userRAM, NULL, NULL);
    progRAM = userRAM + PAGE_OFFSET; // Will be raised if @cmd$ exceeds 255 bytes
-   userTOP = (void *) userRAM + MaximumRAM;
+   _osbyte(0x84, (int *)&userTOP, NULL, NULL);
+
+   // Start by allocating half the advertised memory
+   MaximumRAM = userTOP - userRAM;
+   userTOP = (void *)((uint32_t)userTOP >> 1);
+
    szCmdLine = progRAM - 0x100;     // Must be immediately below default progRAM
    szTempDir = szCmdLine - 0x100;   // Strings must be allocated on BASIC's heap
    szUserDir = szTempDir - 0x100;
