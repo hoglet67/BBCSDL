@@ -28,6 +28,10 @@ static int MaximumRAM = 0;
 //timer_t UserTimerID;
 unsigned int palette[256];
 
+// Malloc heap memory
+static char *__heap_start;
+static char *__heap_end;
+static char *brk;
 
 // Declared in bbmain.c:
 void error(int, const char *);
@@ -86,7 +90,15 @@ int _main(char *params) {
    progRAM = userRAM + PAGE_OFFSET; // Will be raised if @cmd$ exceeds 255 bytes
    _osbyte(0x84, (int *)&userTOP, NULL, NULL);
 
-   // Start by allocating half the advertised memory
+   // Allow 256KB for CPU Stack
+   userTOP -= 0x40000;
+
+   // Allow 256B for Malloc Heap
+   __heap_end = userTOP;
+   userTOP -= 0x40000;
+   __heap_start = brk = userTOP;
+
+   // Start by allocating half the remaining memory
    MaximumRAM = userTOP - userRAM;
    userTOP = (void *)((uint32_t)userTOP >> 1);
 
@@ -133,10 +145,6 @@ int _main(char *params) {
 
    return ret;
 }
-
-static char *__heap_start = (char *) 0xf80000;
-static char *__heap_end = (char *) 0xff0000;
-static char *brk = (char *) 0xf80000;
 
 int _brk(void *addr)
 {
