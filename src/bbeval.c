@@ -25,25 +25,25 @@
 #define floorl floor
 
 static long long powers_of_10[] = {
-   1LL,                      // 10^0
-   10LL,
-   100LL,
-   1000LL,
-   10000LL,
-   100000LL,                 // 10^5
-   1000000LL,
-   10000000LL,
-   100000000LL,
-   1000000000LL,
-   10000000000LL,            // 10^10
-   100000000000LL,
-   1000000000000LL,
-   10000000000000LL,
-   100000000000000LL,
-   1000000000000000LL,       // 10^15
-   10000000000000000LL,
-   100000000000000000LL,
-   1000000000000000000LL     // 10^18
+   -1LL,                      // 10^0
+   -10LL,
+   -100LL,
+   -1000LL,
+   -10000LL,
+   -100000LL,                 // 10^5
+   -1000000LL,
+   -10000000LL,
+   -100000000LL,
+   -1000000000LL,
+   -10000000000LL,            // 10^10
+   -100000000000LL,
+   -1000000000000LL,
+   -10000000000000LL,
+   -100000000000000LL,
+   -1000000000000000LL,       // 10^15
+   -10000000000000000LL,
+   -100000000000000000LL,
+   -1000000000000000000LL     // 10^18
 };
 
 int print_lld(char *buffer, long long i) {
@@ -51,14 +51,15 @@ int print_lld(char *buffer, long long i) {
    if (i == 0) {
       *bp++ = '0';
    } else {
-      if (i < 0) {
+      if (i > 0) {
+         i = -i;
+      } else {
          *bp++ = '-';
-         i = -i;  // TODO: this overflows if i = -2^63
       }
       // Start at 10^18
       long long *p = powers_of_10 + 18;
       // Skip to the lowest power of 10 that is <= i
-      while (*p > i) {
+      while (*p < i) {
          p--;
       }
       // Flag is used to supress leading zeros
@@ -67,7 +68,7 @@ int print_lld(char *buffer, long long i) {
       while (p >= powers_of_10) {
          int digit = '0';
          // Repeated subtract from i
-         while (i >= *p) {
+         while (i <= *p) {
             i -= *p;
             digit++;
          }
