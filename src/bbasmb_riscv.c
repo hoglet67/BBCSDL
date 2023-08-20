@@ -1000,8 +1000,8 @@ void assemble (void)
                      {
                         // Format B
                         // bne rs1, rs2, target
-                        comma();
                         instruction |= reg() << rs1_shift;
+                        comma();
                         // Skip parsing of rs2 in "BxxZ" varients (rs2 will default to zero)
                         if (!(flags & F_ZERO)) {
                            instruction |= reg() << rs2_shift;
