@@ -37,6 +37,7 @@ static char *brk;
 void error(int, const char *);
 void text(const char *);       // Output NUL-terminated string
 void crlf(void);               // Output a newline
+void trap (void);              // Test for ESCape
 int basic(void *ecx, void *edx, void *prompt);
 
 // Declared in bbeval.c:
@@ -222,12 +223,12 @@ enum {
 // Parse ON or OFF:
 static int onoff (char *p)
 {
-	int n = 0 ;
-	if ((*p & 0x5F) == 'O') {
-		p++;
+   int n = 0 ;
+   if ((*p & 0x5F) == 'O') {
+      p++;
    }
-	sscanf (p, "%x", &n);
-	return !n;
+   sscanf (p, "%x", &n);
+   return !n;
 }
 
 // Parse / Execute a local command
@@ -665,7 +666,7 @@ void osline(char *buffer) {     // Get a line of console input
    int ret = _osword(0, block);
    // If escape, make sure the line has a terminator
    if (ret < 0) {
-      *buffer = 0x0D;
+      trap();
    }
 }
 
@@ -685,7 +686,7 @@ void ossave(char *p, void *addr, int len) { // Save a file from memory
 }
 
 void *osopen(int type, char *p) { // Open a file
-	if (type == 0) {
+   if (type == 0) {
       return _osfind(0x40, p); // input only
    } else if (type == 1) {
       return _osfind(0x80, p); // output only
@@ -833,7 +834,9 @@ int getime(void) {     // Return centisecond count
 
 void oswait(int cs) { // Pause for a specified time
    int time = getime();
-   while (getime() < time + cs);
+   while (getime() < time + cs) {
+      trap();
+   }
 }
 
 
