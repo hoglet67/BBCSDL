@@ -1128,7 +1128,7 @@ void assemble (void)
                         // If the lower is negative then correct the upper by adding one
                         // (this is because ADDI always sign extends, so need to compensate for this)
                         if (imm12 & 0x800) {
-                           imm20++;
+                           imm20 = (imm20 + 1) & 0xfffff;
                         }
                         // auipc rd, imm20
                         instruction = opcodes[AUIPC] | (imm20 << 12) | (rd << RD);
@@ -1160,7 +1160,7 @@ void assemble (void)
                         // If the lower is negative then correct the upper by adding one
                         // (this is because ADDI always sign extends, so need to compensate for this)
                         if (imm12 & 0x800) {
-                           imm20++;
+                           imm20 = (imm20 + 1) & 0xfffff;
                         }
                         // Now compose an optimal sequence of lui and/or addi
                         if (imm20) {
