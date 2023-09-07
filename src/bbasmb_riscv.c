@@ -1135,10 +1135,10 @@ void assemble (void)
                         poke(&instruction, 4);
                         if (mnemonic == LA) {
                            // addi rd, rd, imm12
-                           if (imm12) {
-                              instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RS1) | (rd << RD);
-                              poke(&instruction, 4);
-                           }
+                           // Note: addi could be omitted if imm12=0, but that sometimes
+                           // three-pass assembley and causes hard-to-track-down bugs
+                           instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RS1) | (rd << RD);
+                           poke(&instruction, 4);
                         } else {
                            // jalr rd, rd, imm12
                            instruction = opcodes[JALR] | (imm12 << 20) | (rd << RS1) | (rd << RD);
