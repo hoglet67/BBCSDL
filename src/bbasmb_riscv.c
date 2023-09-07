@@ -1167,11 +1167,11 @@ void assemble (void)
                            // lui rd, imm20
                            instruction = opcodes[LUI] | (imm20 << 12) | (rd << RD);
                            poke(&instruction, 4);
-                           if (imm12) {
-                              // addi rd, rd, imm20
-                              instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RS1) | (rd << RD);
-                              poke(&instruction, 4);
-                           }
+                           // addi rd, rd, imm12
+                           // Note: addi could be omitted if imm12=0, but that sometimes
+                           // three-pass assembley and causes hard-to-track-down bugs
+                           instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RS1) | (rd << RD);
+                           poke(&instruction, 4);
                         } else {
                            // addi rd, zero, imm12
                            instruction = opcodes[ADDI] | (imm12 << 20) | (rd << RD);
