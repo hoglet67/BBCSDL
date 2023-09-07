@@ -940,44 +940,62 @@ void assemble (void)
                   case LW:
                   case LBU:
                   case LHU:
-                     {
-                        // Format I
-                        // e.g. lb rd, immediate(rs1)
-                        instruction |= reg() << RD;
-                        comma();
-                        instruction |= imm12() << 20;
-                        if (nxt () != '(') {
-                           error (27, "Missing (") ; // 'Missing ('
-                        }
-                        esi++ ;
-                        instruction |= reg() << RS1;
-                        if (nxt () != ')') {
-                           error (27, NULL) ; // 'Missing )'
-                        }
-                        esi++ ;
-                     }
-                     break;
-
                   case SB:
                   case SH:
                   case SW:
                      {
-                        // Format S
-                        // e.g. sb rs2, immediate(rs1)
-                        instruction |= reg() << RS2;
+                        // Parse the following forms:
+                        //     opcode r1, (r2)
+                        //     opcode r1, immediate(r2)
+                        int r1 = reg();
+                        int r2;
+                        unsigned int imm = 0;
                         comma();
-                        unsigned int u = imm12();
-                        instruction |= (u & 0x01f) << 7;
-                        instruction |= (u & 0xfe0) << 20;
-                        if (nxt () != '(') {
-                           error (27, "Missing (") ; // 'Missing ('
+                        signed char *old_esi = esi; // save the program pointer
+                        // First, try to parse without an immediate
+                        int success = 0;
+                        if (nxt() == '(') {
+                           esi++;
+                           if (count_regs() > 0) {
+                              r2 = reg();
+                              if (nxt() == ')') {
+                                 esi++;
+                                 success = 1;
+                              }
+                           }
                         }
-                        esi++ ;
-                        instruction |= reg() << RS1;
-                        if (nxt () != ')') {
-                           error (27, NULL) ; // 'Missing )'
+                        // Try to parse with an immediate
+                        if (!success) {
+                           esi = old_esi; // restore the program counter
+                           imm = imm12();
+                           if (nxt() != '(') {
+                              error (27, "Missing (") ; // 'Missing ('
+                           }
+                           esi++;
+                           r2 = reg();
+                           if (nxt() != ')') {
+                              error (27, NULL) ; // 'Missing )'
+                           }
+                           esi++;
                         }
-                        esi++ ;
+                        // Build the instruction using r1, imm and r2
+                        if (al == SB || al == SH || al == SW) {
+                           // STORE
+                           // Format S
+                           // e.g. sb rs2, immediate(rs1)
+                           //         ^r1  ^imm      ^r2
+                           instruction |= r1 << RS2;
+                           instruction |= (imm & 0x01f) << 7;
+                           instruction |= (imm & 0xfe0) << 20;
+                        } else {
+                           // LOAD
+                           // Format I
+                           // e.g. lb rd, immediate(rs1)
+                           //         ^r1 ^imm      ^r2
+                           instruction |= r1 << RD;
+                           instruction |= imm << 20;
+                        }
+                        instruction |= r2 << RS1;
                      }
                      break;
 
