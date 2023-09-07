@@ -203,10 +203,9 @@ long double truncl(long double x) {
    return trunc(x);
 }
 
-// Local OSCLI
+// Simplified local OSCLI
 
 #define NCMDS 3
-#define POWR2 2
 
 static char *cmds[NCMDS] = {
    "float",
@@ -234,59 +233,31 @@ static int onoff (char *p)
 // Parse / Execute a local command
 static int localcmd(char *cmd) {
 
-   // Borrowed from Richard's bbccli.c, rather overkill for just three commands
-
-   int b = 0;
-   int h = POWR2;
+   int b;
    int n;
-   char cpy[0x100];
    char *p;
-   char *q;
 
    while (*cmd == ' ') cmd++;
 
    if ((*cmd == 0x0D) || (*cmd == '|') || (*cmd == '.'))
       return 0;
 
-   q = memchr (cmd, 0x0D, sizeof(cpy));
-   if (q == NULL) {
-      error (204, "Bad name");
-   }
-
-   memcpy (cpy, cmd, q - cmd);
-   cpy[q - cmd] = 0;
-   p = cpy;
-   while ((*p = tolower(*p)) != 0) {
-      p++;
-   }
-
-   do {
-      if (((b + h) < NCMDS) && ((strcmp (cpy, cmds[b + h])) >= 0)) {
-         b += h;
+   // Simple match that deliberately doesn't allow abbreviations
+   // (otherwise *H. matches *HEX rather than *HELP
+   p = NULL;
+   for (b = 0; b < NCMDS; b++) {
+      n = strlen(cmds[b]);
+      if (!strncasecmp(cmd, cmds[b], n)) {
+         // parameters follow the command
+         p = cmd + n;
+         break;
       }
-      h /= 2;
-   }
-   while (h > 0);
-
-   n = strchr(cpy, '.') - cpy;
-   if ((n > 0) && ((b + 1) < NCMDS) && (n <= strlen (cmds[b + 1])) && (strncmp (cpy, cmds[b + 1], n) == 0)) {
-      b++;
    }
 
-   p = cpy;
-   q = cmds[b];
-   while (*p && *q && (*p == *q)) {
-      p++;
-      q++;
-   }
-
-   if (*p == '.') {
-      p++;
-   } else if (*q) {
+   if (!p) {
       return 0;
    }
 
-   p += cmd - cpy;
    while (*p == ' ') {
       p++;    // Skip leading spaces
    }
