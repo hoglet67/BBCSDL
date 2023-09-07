@@ -1073,10 +1073,11 @@ void assemble (void)
                      }
                      break;
 
-
                   case LUI:
+                  case AUIPC:
                      // Formal U
                      // e.g. lui rd, immediate
+                     // e.g. auipc rd, immediate
                      {
                         instruction |= reg() << RD;
                         comma();
@@ -1084,19 +1085,6 @@ void assemble (void)
                      }
                      break;
 
-                  case AUIPC:
-                     // Formal U
-                     // e.g. auipc rd, target
-                     {
-                        instruction |= reg() << RD;
-                        comma();
-                        int dest = ((void *) (size_t) expri () - PC);
-                        if ((dest < -0x80000 || dest >= 0x80000) && ((liston & BIT5) != 0)) {
-                           error (1, NULL) ; // 'Jump out of range'
-                        }
-                        instruction |= ((unsigned int) dest) << 12; // imm20
-                     }
-                     break;
                   case LA:
                   case CALL:
                   case TAIL:
