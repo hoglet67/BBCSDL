@@ -7,6 +7,27 @@
 #include "BBC.h"
 #include "version.h"
 
+// RISC-V Co Processor Sys Call Numbers
+
+#define ECALL_BASE  0x00000000
+
+#define OS_QUIT     (ECALL_BASE +  0)   // Unused
+#define OS_CLI      (ECALL_BASE +  1)
+#define OS_BYTE     (ECALL_BASE +  2)
+#define OS_WORD     (ECALL_BASE +  3)
+#define OS_WRCH     (ECALL_BASE +  4)
+#define OS_NEWL     (ECALL_BASE +  5)   // Unused
+#define OS_RDCH     (ECALL_BASE +  6)
+#define OS_FILE     (ECALL_BASE +  7)
+#define OS_ARGS     (ECALL_BASE +  8)
+#define OS_BGET     (ECALL_BASE +  9)
+#define OS_BPUT     (ECALL_BASE + 10)
+#define OS_GBPB     (ECALL_BASE + 11)
+#define OS_FIND     (ECALL_BASE + 12)
+#define OS_SYS_CTRL (ECALL_BASE + 13)   // Unused
+#define OS_HANDLERS (ECALL_BASE + 14)
+#define OS_ERROR    (ECALL_BASE + 15)   // Unused
+
 // From bbccon.h
 extern char *accs;              // String accumulator
 extern char *buff;              // Temporary string buffer
@@ -64,7 +85,7 @@ void oshandlers(unsigned int num, void *handler_fn, void *handler_data, void **o
    register int   a0 asm ("a0") = num;
    register void *a1 asm ("a1") = handler_fn;
    register void *a2 asm ("a2") = handler_data;
-   register int   a7 asm ("a7") = 14;
+   register int   a7 asm ("a7") = OS_HANDLERS;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a1),
@@ -312,7 +333,7 @@ static int localcmd(char *cmd) {
 
 static void _oswrch(unsigned char vdu) {   // Write to display or other output stream (VDU)
    register int a0 asm ("a0") = vdu;
-   register int a7 asm ("a7") = 4;
+   register int a7 asm ("a7") = OS_WRCH;
    asm volatile ("ecall"
                  : // outputs
 
@@ -324,7 +345,7 @@ static void _oswrch(unsigned char vdu) {   // Write to display or other output s
 
 static int _osrdch(void) { // Get character from console input
    register int a0 asm ("a0");
-   register int a7 asm ("a7") = 6;
+   register int a7 asm ("a7") = OS_RDCH;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a0)
@@ -339,7 +360,7 @@ static void _osbyte(int al, int *x, int *y, int *c) {
    register int a1 asm ("a1") = x ? (*x) : 0;
    register int a2 asm ("a2") = y ? (*y) : 0;
    register int a3 asm ("a3");
-   register int a7 asm ("a7") = 2;
+   register int a7 asm ("a7") = OS_BYTE;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a1),
@@ -366,7 +387,7 @@ static int _osword(int al, void *xy) {
    register int a0 asm ("a0") = al;
    register int *a1 asm ("a1") = xy;
    register int a2 asm ("a2") = 0;
-   register int a7 asm ("a7") = 3;
+   register int a7 asm ("a7") = OS_WORD;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a2)
@@ -387,7 +408,7 @@ static unsigned long _osfile(int reason, char *filename, uint32_t *load, uint32_
    register uint32_t a3 asm ("a3") = exec  ? (*exec ) : 0;
    register uint32_t a4 asm ("a4") = start ? (*start) : 0;
    register uint32_t a5 asm ("a5") = end   ? (*end  ) : 0;
-   register int   a7 asm ("a7") = 7;
+   register int   a7 asm ("a7") = OS_FILE;
    asm volatile ("ecall"
                  : // outputs
                    "+r"  (a0),
@@ -422,7 +443,7 @@ static unsigned long _osfile(int reason, char *filename, uint32_t *load, uint32_
 static void * _osfind(int a, char *p) {
    register int   a0 asm ("a0") = a;
    register void *a1 asm ("a1") = p;
-   register int   a7 asm ("a7") = 12;
+   register int   a7 asm ("a7") = OS_FIND;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a0)
@@ -437,7 +458,7 @@ static void * _osfind(int a, char *p) {
 static int _osbget(void *chan, int *peof) { // Read a byte from a file
    register int   a0 asm ("a0");
    register void *a1 asm ("a1") = chan;
-   register int   a7 asm ("a7") = 9;
+   register int   a7 asm ("a7") = OS_BGET;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a0)
@@ -458,7 +479,7 @@ static int _osbget(void *chan, int *peof) { // Read a byte from a file
 static void _osbput(void *chan, unsigned char byte) { // Write a byte to a file
    register int   a0 asm ("a0") = byte;
    register void *a1 asm ("a1") = chan;
-   register int   a7 asm ("a7") = 10;
+   register int   a7 asm ("a7") = OS_BPUT;
    asm volatile ("ecall"
                  : // outputs
                  : // inputs
@@ -473,7 +494,7 @@ static int _osargs(int reason, void *chan, void *data) {
    register int           a0 asm ("a0") = reason;
    register void         *a1 asm ("a1") = chan;
    register uint32_t      a2 asm ("a2") = *(uint32_t *)data;
-   register int           a7 asm ("a7") = 8;
+   register int           a7 asm ("a7") = OS_ARGS;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a0),
@@ -496,7 +517,7 @@ static int _osgbpb(uint8_t reason, uint8_t chan, uint32_t *data, uint32_t *num, 
    register uint32_t a2 asm ("a2") = data ? (*data) : 0;
    register uint32_t a3 asm ("a3") = num  ? (*num ) : 0;
    register uint32_t a4 asm ("a4") = ptr  ? (*ptr ) : 0;
-   register int   a7 asm ("a7") = 11;
+   register int   a7 asm ("a7") = OS_GBPB;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a0),
@@ -529,7 +550,7 @@ static void _oscli(char *cmd) {      // Execute an emulated OS command
       return;
    }
    register int a0 asm ("a0") = (int) cmd;
-   register int a7 asm ("a7") = 1;
+   register int a7 asm ("a7") = OS_CLI;
    asm volatile ("ecall"
                  : // outputs
                    "+r" (a0)
