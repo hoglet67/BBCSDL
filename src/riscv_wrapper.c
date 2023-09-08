@@ -380,22 +380,42 @@ static int _osword(int al, void *xy) {
    return a2;
 }
 
-static unsigned long _osfile(int reason, char *filename, void *block) {
-   register int   a0 asm ("a0") = reason;
-   register void *a1 asm ("a1") = filename;
-   register void *a2 asm ("a2") = block;
+static unsigned long _osfile(int reason, char *filename, uint32_t *load, uint32_t *exec, uint32_t *start, uint32_t *end) {
+   register int      a0 asm ("a0") = reason;
+   register char    *a1 asm ("a1") = filename;
+   register uint32_t a2 asm ("a2") = load  ? (*load ) : 0;
+   register uint32_t a3 asm ("a3") = exec  ? (*exec ) : 0;
+   register uint32_t a4 asm ("a4") = start ? (*start) : 0;
+   register uint32_t a5 asm ("a5") = end   ? (*end  ) : 0;
    register int   a7 asm ("a7") = 7;
    asm volatile ("ecall"
                  : // outputs
-                   "+r"  (a0)
+                   "+r"  (a0),
+                   "+r"  (a2),
+                   "+r"  (a3),
+                   "+r"  (a4),
+                   "+r"  (a5)
                  : // inputs
                    "r"  (a0),
                    "r"  (a1),
                    "r"  (a2),
+                   "r"  (a3),
+                   "r"  (a4),
+                   "r"  (a5),
                    "r"  (a7)
-                 : // clobber
-                   "memory"
                  );
+   if (load) {
+      *load = a2;
+   }
+   if (exec) {
+      *exec = a3;
+   }
+   if (start) {
+      *start = a4;
+   }
+   if (end) {
+      *end = a5;
+   }
    return a0;
 }
 
@@ -470,22 +490,38 @@ static int _osargs(int reason, void *chan, void *data) {
    return a0;
 }
 
-static int _osgbpb(int reason, void *block) {
-   register int   a0 asm ("a0") = reason;
-   register void *a1 asm ("a1") = block;
-   register int   a2 asm ("a2") = 0;
+static int _osgbpb(uint8_t reason, uint8_t chan, uint32_t *data, uint32_t *num, uint32_t *ptr, int *peof) {
+   register uint32_t a0 asm ("a0") = reason;
+   register uint32_t a1 asm ("a1") = chan;
+   register uint32_t a2 asm ("a2") = data ? (*data) : 0;
+   register uint32_t a3 asm ("a3") = num  ? (*num ) : 0;
+   register uint32_t a4 asm ("a4") = ptr  ? (*ptr ) : 0;
    register int   a7 asm ("a7") = 11;
    asm volatile ("ecall"
                  : // outputs
-                   "+r" (a2)
+                   "+r" (a0),
+                   "+r" (a2),
+                   "+r" (a3),
+                   "+r" (a4)
                  : // inputs
                    "r"  (a0),
                    "r"  (a1),
+                   "r"  (a2),
+                   "r"  (a3),
+                   "r"  (a4),
                    "r"  (a7)
-                 : // clobber
-                   "memory"
                  );
-   return a2 & 1;
+   if (data) {
+      *data = a2;
+   }
+   if (num) {
+      *num = a3;
+   }
+   if (ptr) {
+      *ptr = a4;
+   }
+   *peof = (a0 & 0x80000000) ? 1 : 0;
+   return a0 & 0xff;
 }
 
 static void _oscli(char *cmd) {      // Execute an emulated OS command
@@ -507,6 +543,29 @@ static void _oscli(char *cmd) {      // Execute an emulated OS command
 // BBC Basic MOS API Abstraction
 // ===================================================================
 
+// Helpers to avoid unaligned accessses
+
+static uint16_t read16(uint8_t *addr) {
+   uint16_t data = *addr++;
+   data |= (*addr++) << 8;
+   return data;
+}
+
+static uint32_t read32(uint8_t *addr) {
+   uint32_t data = *addr++;
+   data |= (*addr++) << 8;
+   data |= (*addr++) << 16;
+   data |= (*addr++) << 24;
+   return data;
+}
+
+static void write32(uint8_t *addr, uint32_t data) {
+   *addr++ = (uint8_t) (data & 0xff);
+   *addr++ = (uint8_t) ((data >> 8) & 0xff);
+   *addr++ = (uint8_t) ((data >> 16) & 0xff);
+   *addr++ = (uint8_t) ((data >> 24) & 0xff);
+}
+
 // returns PPYYXXAA, as expected by USR
 int oscall(int addr) {    // Call an emulated OS function
    int a = stavar[1];
@@ -526,23 +585,29 @@ int oscall(int addr) {    // Call an emulated OS function
    // Y% = block DIV 256
    // CALL osword
    //
-   uint32_t block = x;
-   if (block < 256) {
-      block |= (y << 8);
-   }
+   uint8_t *block = (uint8_t *)((x < 0x100) ? (x | (y << 8)) : x);
    switch (addr) {
    case 0xFFCE:
       if (a) {
          // Open file
-         a = ((uint32_t)_osfind(a, (void *)block)) & 0xff; // filename in xy
+         a = ((uint32_t)_osfind(a, (char *)block)) & 0xff; // filename in xy
       } else {
          // Close file
          _osfind(a, (void *)y); // handle in y
       }
       break;
    case 0xFFD1:
-      c = _osgbpb(a, (uint32_t *)x);
-      break;
+      {
+         uint8_t  chan = *block;
+         uint32_t data = read32(block + 1);
+         uint32_t num  = read32(block + 5);
+         uint32_t ptr  = read32(block + 9);
+         a = _osgbpb(a, chan, &data, &num, &ptr, &c);
+         write32(block + 1, data);
+         write32(block + 5, num);
+         write32(block + 9, ptr);
+         break;
+      }
    case 0xFFD4:
       _osbput((void *)y, a);
       break;
@@ -561,9 +626,17 @@ int oscall(int addr) {    // Call an emulated OS function
          // On 8-bit MOS, filename is only a two byte thing, so the
          // best we can do is to remap this assuming the string is
          // likely to be in the same 64K address range as the
-         // control.
-         char *filename = (char *)((x & 0xffff0000) + *(uint16_t *)x);
-         a = _osfile(a, filename, (void *)x + 2) & 0xff;
+         // control block.
+         char *filename = (char *)(((uint32_t)block) & 0xffff0000) + read16(block);
+         uint32_t load  = read32(block +  2);
+         uint32_t exec  = read32(block +  6);
+         uint32_t start = read32(block + 10);
+         uint32_t end   = read32(block + 14);
+         a = _osfile(a, filename, &load, &exec, &start, &end) & 0xff;
+         write32(block +  2, load);
+         write32(block +  6, exec);
+         write32(block + 10, start);
+         write32(block + 14, end);
          break;
       }
    case 0xFFE0:
@@ -590,7 +663,7 @@ int oscall(int addr) {    // Call an emulated OS function
       _oswrch(a & 0xff);
       break;
    case 0xFFF1:
-      _osword(a, (void *)block);
+      _osword(a, block);
       break;
    case 0xFFF4:
       _osbyte(a, &x, &y, &c);
@@ -643,17 +716,15 @@ void osline(char *buffer) {     // Get a line of console input
 
 // MOS - File
 
-static void osfile(int reason, char *filename, void *load, void *exec, void *start, void *end) {
-   void *block[4] = {load, exec, start, end};
-   _osfile(reason, filename, block);
-}
-
 void osload(char *p, void *addr, int max) { // Load a file to memory
-   osfile(255, p, addr, NULL, NULL, NULL);
+   uint32_t load = (uint32_t) addr;
+   _osfile(255, p, &load, NULL, NULL, NULL);
 }
 
 void ossave(char *p, void *addr, int len) { // Save a file from memory
-   osfile(0, p, NULL, NULL, addr, addr + len);
+   uint32_t start = (uint32_t) addr;
+   uint32_t end   = (uint32_t) (addr + len);
+   _osfile(0, p, NULL, NULL, &start, &end);
 }
 
 void *osopen(int type, char *p) { // Open a file
