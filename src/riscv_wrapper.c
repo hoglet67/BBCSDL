@@ -9,7 +9,7 @@
 
 // RISC-V Co Processor Sys Call Numbers
 
-#define ECALL_BASE  0x00000000
+#define ECALL_BASE  0x00AC0000
 
 #define OS_QUIT     (ECALL_BASE +  0)   // Unused
 #define OS_CLI      (ECALL_BASE +  1)
