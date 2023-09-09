@@ -81,7 +81,30 @@ heapptr oshwm(void *addr, int settop) {  // Allocate memory above HIMEM
    }
 }
 
-void oshandlers(unsigned int num, void *handler_fn, void *handler_data, void **old_handler_fn, void **old_handler_data) {
+static void _ossysctrl(int a) {
+   register int a0 asm ("a0") = a;
+   register int a7 asm ("a7") = OS_SYS_CTRL;
+   asm volatile ("ecall"
+                 : // outputs
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a7)
+                 );
+}
+
+// This call never returns
+static void _osquit(int a) {
+   register int a0 asm ("a0") = a;
+   register int a7 asm ("a7") = OS_QUIT;
+   asm volatile ("ecall"
+                 : // outputs
+                 : // inputs
+                   "r"  (a0),
+                   "r"  (a7)
+                 );
+}
+
+static void _oshandlers(unsigned int num, void *handler_fn, void *handler_data, void **old_handler_fn, void **old_handler_data) {
    register int   a0 asm ("a0") = num;
    register void *a1 asm ("a1") = handler_fn;
    register void *a2 asm ("a2") = handler_data;
@@ -104,7 +127,7 @@ void oshandlers(unsigned int num, void *handler_fn, void *handler_data, void **o
    }
 }
 
-int _main(char *params) {
+void _main(char *params) {
 
    void* immediate = (void *) 1;
 
@@ -156,16 +179,19 @@ int _main(char *params) {
    void *old_error_handler;
    void *old_escape_handler;
 
-   oshandlers(0xfffd, error_handler,  0, &old_error_handler,  NULL);
-   oshandlers(0xfffe, escape_handler, 0, &old_escape_handler, NULL);
+   _ossysctrl(1); // Set BASIC as currentl program so it survives soft BREAK
+
+   _oshandlers(0xfffd, error_handler,  0, &old_error_handler,  NULL);
+   _oshandlers(0xfffe, escape_handler, 0, &old_escape_handler, NULL);
 
    int ret = basic(progRAM, userTOP, immediate);
 
    // Restore old handlers
-   oshandlers(0xfffd, old_error_handler,  0, NULL, NULL);
-   oshandlers(0xfffe, old_escape_handler, 0, NULL, NULL);
+   _oshandlers(0xfffd, old_error_handler,  0, NULL, NULL);
+   _oshandlers(0xfffe, old_escape_handler, 0, NULL, NULL);
 
-   return ret;
+   // OS_QUIT
+   _osquit(ret);
 }
 
 int _brk(void *addr)
