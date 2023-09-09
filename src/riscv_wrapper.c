@@ -104,7 +104,7 @@ static void _osquit(int a) {
                  );
 }
 
-static void _oshandlers(unsigned int num, void *handler_fn, void *handler_data, void **old_handler_fn, void **old_handler_data) {
+static void _oshandlers(int num, void *handler_fn, void *handler_data, void **old_handler_fn, void **old_handler_data) {
    register int   a0 asm ("a0") = num;
    register void *a1 asm ("a1") = handler_fn;
    register void *a2 asm ("a2") = handler_data;
@@ -181,14 +181,14 @@ void _main(char *params) {
 
    _ossysctrl(1); // Set BASIC as currentl program so it survives soft BREAK
 
-   _oshandlers(0xfffd, error_handler,  0, &old_error_handler,  NULL);
-   _oshandlers(0xfffe, escape_handler, 0, &old_escape_handler, NULL);
+   _oshandlers(-3, error_handler,  0, &old_error_handler,  NULL);
+   _oshandlers(-2, escape_handler, 0, &old_escape_handler, NULL);
 
    int ret = basic(progRAM, userTOP, immediate);
 
    // Restore old handlers
-   _oshandlers(0xfffd, old_error_handler,  0, NULL, NULL);
-   _oshandlers(0xfffe, old_escape_handler, 0, NULL, NULL);
+   _oshandlers(-3, old_error_handler,  0, NULL, NULL);
+   _oshandlers(-2, old_escape_handler, 0, NULL, NULL);
 
    // OS_QUIT
    _osquit(ret);
