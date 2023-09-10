@@ -763,15 +763,47 @@ void osline(char *buffer) {     // Get a line of console input
 
 // MOS - File
 
+#define MAX_FILENAME 255
+
+static char *sanitize_filename(char *src) {
+   static char buffer[MAX_FILENAME + 1];
+   // Skip any leading space
+   while (*src == ' ') {
+      src++;
+   }
+   int n = 0;
+   if (*src == '"') {
+      // Handle quoted strings
+      src++;
+      while (*src != '"') {
+         if (*src == 0 || *src == 13 || n == MAX_FILENAME) {
+            error (253, "Bad string") ;
+         }
+         buffer[n++] = *src++;
+      }
+   } else {
+      // Handle unquoted strings
+      while (*src != 0 && *src != 13) {
+         if (n == MAX_FILENAME) {
+            error (253, "Bad string") ;
+         }
+         buffer[n++] = *src++;
+      }
+   }
+   buffer[n++] = 13;
+   return buffer;
+}
+
+
 void osload(char *p, void *addr, int max) { // Load a file to memory
    uint32_t load = (uint32_t) addr;
-   _osfile(255, p, &load, NULL, NULL, NULL);
+   _osfile(255, sanitize_filename(p), &load, NULL, NULL, NULL);
 }
 
 void ossave(char *p, void *addr, int len) { // Save a file from memory
    uint32_t start = (uint32_t) addr;
    uint32_t end   = (uint32_t) (addr + len);
-   _osfile(0, p, NULL, NULL, &start, &end);
+   _osfile(0, sanitize_filename(p), NULL, NULL, &start, &end);
 }
 
 void *osopen(int type, char *p) { // Open a file
