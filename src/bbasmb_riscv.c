@@ -537,6 +537,69 @@ static int lookup (char **arr, int num)
    return i ;
 }
 
+static int lookup_mnemonic (void) {
+   const char *code = (const char *)esi;
+
+   // Tokenized AND, ANDI
+
+   if (code[0] == (char) TAND) {
+      if (code[1] == 'i' || code[1] == 'I') {
+         esi += 2;
+         return ANDI;
+      } else {
+         esi += 1;
+         return AND;
+      }
+   }
+
+    // Tokenized OR, ORI
+   if (code[0] == (char) TOR) {
+      if (code[1] == 'i' || code[1] == 'I') {
+         esi += 2;
+         return ORI;
+      } else {
+         esi += 1;
+         return OR;
+      }
+   }
+
+   // Tokenized DIV, DIVU
+   if (code[0] == (char) TDIV) {
+      if (code[1] == 'u' || code[1] == 'U') {
+         esi += 2;
+         return DIVU;
+      } else {
+         esi += 1;
+         return DIV;
+      }
+   }
+
+   // Tokenized REM, REMU
+   if (code[0] == (char) TREM) {
+      if (code[1] == 'u' || code[1] == 'U') {
+         esi += 2;
+         return REMU;
+      } else {
+         esi += 1;
+         return REM;
+      }
+   }
+
+   // Tokenized NOT
+   if (code[0] == (char) TNOT) {
+      esi += 1;
+      return NOT;
+   }
+
+   // Tokenized CALL
+   if (code[0] == (char) TCALL) {
+      esi += 1;
+      return CALL;
+   }
+
+   return lookup(mnemonics, sizeof(mnemonics)/sizeof(mnemonics[0])) ;
+}
+
 static int count_regs () {
    signed char *old_esi = esi; // save the program pointer
    int i, n = 0;
@@ -729,7 +792,6 @@ void assemble (void)
                break ;
 
             case ';':
-            case TREM:
                while ((*esi != 0x0D) && (*esi != ':')) esi++ ;
                break ;
 
@@ -758,7 +820,7 @@ void assemble (void)
 
             default:
                esi-- ;
-               mnemonic = lookup (mnemonics, sizeof(mnemonics)/sizeof(mnemonics[0])) ;
+               mnemonic = lookup_mnemonic();
 
                if (mnemonic != OPT)
                   init = 0 ;
