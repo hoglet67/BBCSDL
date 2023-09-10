@@ -850,11 +850,13 @@ void assemble (void)
                         if (mnemonic == EQUQ)
                            {
                               poke (&n, 8) ;
-                              continue ;
                            }
-                        instruction = (int) n ;
+                        else
+                           {
+                              poke (&n, 4) ;
+                           }
                      }
-                     break ;
+                     continue ;
 
                   case DCS:
                   case EQUS:
