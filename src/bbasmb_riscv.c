@@ -634,21 +634,30 @@ static unsigned char reg (void)
    return regno[i] ;
 }
 
+
+static inline void validate_imm12(long long immediate) {
+   if (immediate < -0x800 || immediate >= 0x800) {
+      error (17, "imm12 constant out of range");
+   }
+}
+
+static inline void validate_imm20(long long immediate) {
+   if (immediate < -0x80000 || immediate >= 0x80000) {
+      error (17, "imm20 constant out of range");
+   }
+}
+
 static unsigned int imm12(void) {
    long long immediate = expri();
    // immediate is a 12-bit signed
-   if (immediate < -0x8000 || immediate >= 0x8000) {
-      error (17, "imm12 constant out of range");
-   }
+   validate_imm12(immediate);
    return ((unsigned int) immediate) & 0xFFF;
 }
 
 static unsigned int imm20(void) {
    long long immediate = expri();
    // immediate is a 20-bit signed
-   if (immediate < -0x80000 || immediate >= 0x80000) {
-      error (17, "imm20 constant out of range");
-   }
+   validate_imm20(immediate);
    return ((unsigned int) immediate) & 0xFFFFF;
 }
 
@@ -685,6 +694,29 @@ static void *align (void)
             stavar[15]++ ;
       } ;
    return PC ;
+}
+
+static int eol (char ch)
+{
+   return (( ch == 0x0D ) || ( ch == ':' ) || ( ch == ';' )) ? 1 : 0;
+}
+
+static unsigned int generate_auipc(int rd, long long target) {
+   int instruction;
+   // Calculate the 32-bit offset relative to the current PC
+   unsigned int imm32 = (unsigned int) target - (unsigned int) PC;
+   // Split into a 20-bit upper and a 12-bit lower
+   unsigned int imm20 = imm32 >> 12;
+   unsigned int imm12 = imm32 & 0xfff;
+   // If the lower is negative then correct the upper by adding one
+   // (the 12-bit immediate is always sign extended, so need to compensate for this)
+   if (imm12 & 0x800) {
+      imm20 = (imm20 + 1) & 0xfffff;
+   }
+   // auipc rd, imm20
+   instruction = opcodes[AUIPC] | (imm20 << 12) | (rd << RD);
+   poke(&instruction, 4);
+   return imm12;
 }
 
 void assemble (void)
@@ -1008,11 +1040,13 @@ void assemble (void)
                   case SH:
                   case SW:
                      {
+                        int store = (mnemonic == SB || mnemonic == SH || mnemonic == SW) ? 1 : 0;
                         // Parse the following forms:
-                        //     opcode r1, (r2)
                         //     opcode r1, immediate(r2)
+                        //     opcode r1, (r2)           ; immediate can be omitted
+                        //     opcode r1, symbol         ; this is the load/store global pseudo
                         int r1 = reg();
-                        int r2;
+                        int r2 = 0;
                         unsigned int imm = 0;
                         comma();
                         signed char *old_esi = esi; // save the program pointer
@@ -1028,22 +1062,41 @@ void assemble (void)
                               }
                            }
                         }
-                        // Try to parse with an immediate
+                        // If the simple case not found, then backtrack
                         if (!success) {
                            esi = old_esi; // restore the program counter
-                           imm = imm12();
-                           if (nxt() != '(') {
-                              error (27, "Missing (") ; // 'Missing ('
+
+                           // Parse the immediate or symbol
+                           long long value = expri();
+
+                           signed char c = nxt();
+                           if (c == '(') {
+                              // opcode r1, immediate(r2)
+                              esi++;
+                              r2 = reg();
+                              if (nxt() != ')') {
+                                 error (27, NULL) ; // 'Missing )'
+                              }
+                              esi++;
+                              validate_imm12(value);
+                              imm = (unsigned int) (value & 0xfff);
+                           } else if (store && c == ',') {
+                              // store r1, symbol, r2
+                              esi++;
+                              r2 = reg();
+                              imm = generate_auipc(r2, value);
+                           } else if (!store && eol(c)) {
+                              // load r1, symbol
+                              r2 = r1;
+                              imm = generate_auipc(r1, value);
+                           } else {
+                              // something expected
+                              error (16, NULL) ; // 'Syntax error'
                            }
-                           esi++;
-                           r2 = reg();
-                           if (nxt() != ')') {
-                              error (27, NULL) ; // 'Missing )'
-                           }
-                           esi++;
                         }
-                        // Build the instruction using r1, imm and r2
-                        if (al == SB || al == SH || al == SW) {
+
+                        // Build the final load/store instruction using r1, imm and r2
+                        if (store) {
                            // STORE
                            // Format S
                            // e.g. sb rs2, immediate(rs1)
@@ -1056,12 +1109,14 @@ void assemble (void)
                            // Format I
                            // e.g. lb rd, immediate(rs1)
                            //         ^r1 ^imm      ^r2
-                           instruction |= r1 << RD;
+                           instruction |= r1  << RD;
                            instruction |= imm << 20;
                         }
                         instruction |= r2 << RS1;
+                        poke(&instruction, 4);
+
                      }
-                     break;
+                     continue;
 
                   case BEQ:
                   case BNE:
@@ -1132,12 +1187,12 @@ void assemble (void)
                   case JR:
                   case JALR:
                      // Format I
-                     // jalr rd, rs1, imm20
-                     // jalr     rs1, imm20   (rd default to ra)
+                     // jalr rd, rs1, imm12
+                     // jalr     rs1, imm12   (rd default to ra)
                      // jr       rs1          (rd defaults to zero)
-                     // jalr rd, rs1          (imm20 defaults to zero)
-                     // jalr     rs1          (imm20 defaults to zero, rd defaults to ra)
-                     // jr       rs1          (imm20 defaults to zero, rd defaills to zero)
+                     // jalr rd, rs1          (imm12 defaults to zero)
+                     // jalr     rs1          (imm12 defaults to zero, rd defaults to ra)
+                     // jr       rs1          (imm12 defaults to zero, rd defaills to zero)
                      {
                         if (count_regs() == 1) {
                            if (mnemonic == JALR) {
@@ -1184,19 +1239,8 @@ void assemble (void)
                         } else {
                            rd = (mnemonic == CALL) ? 1 : 6;
                         }
-                        // Calculate the 32-bit offset relative to the current PC
-                        unsigned int imm32 = (unsigned int) expri () - (unsigned int) PC;
-                        // Split into a 20-bit upper and a 12-bit lower
-                        unsigned int imm20 = imm32 >> 12;
-                        unsigned int imm12 = imm32 & 0xfff;
-                        // If the lower is negative then correct the upper by adding one
-                        // (this is because ADDI always sign extends, so need to compensate for this)
-                        if (imm12 & 0x800) {
-                           imm20 = (imm20 + 1) & 0xfffff;
-                        }
-                        // auipc rd, imm20
-                        instruction = opcodes[AUIPC] | (imm20 << 12) | (rd << RD);
-                        poke(&instruction, 4);
+                        // Generate an AUIPC instruction, returning the remaining 12-bit immediate
+                        unsigned int imm12 = generate_auipc(rd, expri());
                         if (mnemonic == LA) {
                            // addi rd, rd, imm12
                            // Note: addi could be omitted if imm12=0, but that sometimes
