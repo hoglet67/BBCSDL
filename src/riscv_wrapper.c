@@ -6,6 +6,7 @@
 #include <math.h>
 #include "BBC.h"
 #include "version.h"
+#include "build.h"
 
 // RISC-V Co Processor Sys Call Numbers
 
@@ -170,6 +171,8 @@ void _main(char *params) {
    if (immediate == (void *) 1)
       {
          text(szVersion);
+         crlf();
+         text(szBuild);
          crlf();
          text(szNotice);
          crlf();

@@ -15,13 +15,16 @@ ASFLAGS = -I ../../include -march=${ARCH} -mabi=${ABI}
 CFLAGS  = --specs=nano.specs -u _printf_float -Wall -I ../../include -march=${ARCH} -mabi=${ABI} -c -Os
 LDFLAGS = --specs=nano.specs -u _printf_float -lm -nostartfiles -Tbbcbasic.ld  -Os
 
-all: rvbasic.ssd
+all: version rvbasic.ssd
+
+version:
+	./version.sh
 
 crt0.o: crt0.s
 	$(AS) $(ASFLAGS) $< -o $@
 
-riscv_wrapper.o: riscv_wrapper.c BBC.h
-	$(CXX) $(CFLAGS) $< -o $@
+riscv_wrapper.o: riscv_wrapper.c build.h BBC.h
+	$(CXX) $(CFLAGS) -I. $< -o $@
 
 bbmain.o: bbmain.c BBC.h
 	$(CXX) $(CFLAGS) $< -o $@
@@ -32,7 +35,6 @@ bbexec.o: bbexec.c BBC.h
 bbeval.o: bbeval.c BBC.h
 	$(CXX) -Wno-array-bounds $(CFLAGS) $< -o $@
 
-# TODO
 bbasmb.o: bbasmb_riscv.c BBC.h
 	$(CXX) $(CFLAGS) $< -o $@
 
@@ -55,4 +57,4 @@ rvbasic.ssd: RVBASIC
 	beeb info $@
 
 clean:
-	rm -f $(OBJ) bbcbasic RVBASIC rvbasic.ssd
+	rm -f $(OBJ) build.h bbcbasic RVBASIC rvbasic.ssd
