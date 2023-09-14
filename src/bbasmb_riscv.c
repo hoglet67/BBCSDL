@@ -118,6 +118,11 @@ void storen (VAR, void *, unsigned char) ;
 #define OP_CSRRSI    0x00006073
 #define OP_CSRRCI    0x00007073
 
+#define OP_MRET      0x30200073
+#define OP_SRET      0x10200073
+#define OP_URET      0x00200073
+#define OP_WFI       0x10500073
+
 #define OP_BUILTIN   0xffffffff
 #define OP_PSEUDO    0x00000000
 
@@ -192,6 +197,7 @@ static char *mnemonics[] = {
    "li",
    "lui",
    "lw",
+   "mret",
    "mulh",
    "mulsu",
    "mulu",
@@ -220,11 +226,14 @@ static char *mnemonics[] = {
    "snze",
    "srai",
    "sra",
+   "sret",
    "srli",
    "srl",
    "sub",
    "sw",
    "tail",
+   "uret",
+   "wfi",
    "xori",
    "xor"
 };
@@ -289,6 +298,7 @@ static uint32_t opcodes[] = {
    OP_PSEUDO,                       // li      (pseudo)
    OP_LUI,                          // lui
    OP_LW,                           // lw
+   OP_MRET,                         // mret
    OP_MULH,                         // mulh
    OP_MULSU,                        // mulsu
    OP_MULU,                         // mulu
@@ -317,11 +327,14 @@ static uint32_t opcodes[] = {
    OP_SLTU | F_REVERSED | F_ZERO,   // snez    (sltu rd, zero, rs)
    OP_SRAI,                         // srai
    OP_SRA,                          // sra
+   OP_SRET,                         // sret
    OP_SRLI,                         // srli
    OP_SRL,                          // srl
    OP_SUB,                          // sub
    OP_SW,                           // sw
    OP_PSEUDO,                       // tail
+   OP_URET,                         // uret
+   OP_WFI,                          // wfi
    OP_XORI,                         // xori
    OP_XOR                           // xor
 };
@@ -385,6 +398,7 @@ enum {
    LI,
    LUI,
    LW,
+   MRET,
    MULH,
    MULSU,
    MULU,
@@ -413,11 +427,14 @@ enum {
    SNEZ,
    SRAI,
    SRA,
+   SRET,
    SRLI,
    SRL,
    SUB,
    SW,
    TAIL,
+   URET,
+   WFI,
    XORI,
    XOR
 };
