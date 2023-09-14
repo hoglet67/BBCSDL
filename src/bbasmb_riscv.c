@@ -111,6 +111,13 @@ void storen (VAR, void *, unsigned char) ;
 #define OP_REMU      0x02007033
 #define OP_REM       0x02006033
 
+#define OP_CSRRW     0x00001073
+#define OP_CSRRS     0x00002073
+#define OP_CSRRC     0x00003073
+#define OP_CSRRWI    0x00005073
+#define OP_CSRRSI    0x00006073
+#define OP_CSRRCI    0x00007073
+
 #define OP_BUILTIN   0xffffffff
 #define OP_PSEUDO    0x00000000
 
@@ -150,6 +157,15 @@ static char *mnemonics[] = {
    "bnez",
    "bne",
    "call",
+   "csrrci",
+   "csrrc",
+   "csrrsi",
+   "csrrs",
+   "csrrwi",
+   "csrrw",
+   "csrr",
+   "csrwi",
+   "csrw",
    "db",
    "dcb",
    "dcd",
@@ -238,6 +254,15 @@ static uint32_t opcodes[] = {
    OP_BNE | F_ZERO,                 // bnez
    OP_BNE,                          // bne
    OP_PSEUDO,                       // call
+   OP_CSRRCI,                       // csrrci
+   OP_CSRRC ,                       // csrrc
+   OP_CSRRSI,                       // csrrsi
+   OP_CSRRS ,                       // csrrs
+   OP_CSRRWI,                       // csrrwi
+   OP_CSRRW ,                       // csrrw
+   OP_CSRRS,                        // csrr    (csrrs    rd, csr, zero)
+   OP_CSRRWI,                       // csrwi   (csrrwi zero, csr, rs1)
+   OP_CSRRW,                        // csrw    (csrrwi zero, csr, uimm5)
    OP_BUILTIN,                      // db
    OP_BUILTIN,                      // dcb
    OP_BUILTIN,                      // dcd
@@ -325,6 +350,15 @@ enum {
    BNEZ,
    BNE,
    CALL,
+   CSRRCI,
+   CSRRC,
+   CSRRSI,
+   CSRRS,
+   CSRRWI,
+   CSRRW,
+   CSRR,
+   CSRWI,
+   CSRW,
    DB,
    DCB,
    DCD,
@@ -522,6 +556,56 @@ static unsigned char regno[] = {
    0   // zero
 };
 
+static char *csrs[] = {
+   "cycleh",
+   "cycle",
+   "instreth",
+   "instret",
+   "marchid",
+   "mcause",
+   "mcounteren",
+   "medeleg",
+   "mepc",
+   "mhartid",
+   "mideleg",
+   "mie",
+   "mimpid",
+   "mip",
+   "misa",
+   "mscratch",
+   "mstatus",
+   "mtval",
+   "mtvec",
+   "mvendorid",
+   "timeh",
+   "time"
+};
+
+static int csrno[] = {
+   0xc80, // cycleh
+   0xc00, // cycle
+   0xc82, // instreth
+   0xc02, // instret
+   0xf12, // marchid
+   0x342, // mcause
+   0x306, // mcounteren
+   0x302, // medeleg
+   0x341, // mepc
+   0xf14, // mhartid
+   0x303, // mideleg
+   0x304, // mie
+   0xf13, // mimpid
+   0x344, // mip
+   0x301, // misa
+   0x340, // mscratch
+   0x300, // mstatus
+   0x343, // mtval
+   0x305, // mtvec
+   0xf11, // mvendorid
+   0xc81, // timeh
+   0xc01  // time
+};
+
 static int lookup (char **arr, int num)
 {
    int i, n ;
@@ -634,6 +718,41 @@ static unsigned char reg (void)
    return regno[i] ;
 }
 
+static unsigned int csr (void)
+{
+   int i ;
+   nxt () ;
+
+   // Tokenized TIME, TIMEH
+
+   const char *code = (const char *)esi;
+
+   if (code[0] == (char) TTIMEL || code[0] == (char) TTIMER) {
+      if (code[1] == 'h' || code[1] == 'H') {
+         esi += 2;
+         return 0xc81;
+      } else {
+         esi += 1;
+         return 0xc01;
+      }
+   }
+
+   i = lookup (csrs, sizeof(csrs) / sizeof(csrs[0])) ;
+   if (i < 0)
+      {
+         i = itemi() ;
+         if ((i < 0) || (i > 4095))
+            error (16, NULL) ; // 'Syntax error'
+         return i ;
+      }
+   return csrno[i] ;
+}
+
+static inline void validate_uimm5(long long immediate) {
+   if (immediate < 0x00 || immediate >= 0x20) {
+      error (17, "uimm5 constant out of range");
+   }
+}
 
 static inline void validate_imm12(long long immediate) {
    if (immediate < -0x800 || immediate >= 0x800) {
@@ -645,6 +764,13 @@ static inline void validate_imm20(long long immediate) {
    if (immediate < -0x80000 || immediate >= 0x80000) {
       error (17, "imm20 constant out of range");
    }
+}
+
+static unsigned int uimm5(void) {
+   long long immediate = expri();
+   // immediate is a 5-bit unsigned
+   validate_uimm5(immediate);
+   return ((unsigned int) immediate) & 0x1F;
 }
 
 static unsigned int imm12(void) {
@@ -1287,6 +1413,45 @@ void assemble (void)
                         }
                      }
                      continue ; // n.b. not break
+
+                  case CSRR:
+                  case CSRW:
+                  case CSRRC:
+                  case CSRRS:
+                  case CSRRW:
+                     // CSR instructions / pseudo instructions
+                     // e.g. csrrw rd, csr, rs
+                     //       csrr rd, csr
+                     //       csrw     csr, rs
+                     {
+                        if (mnemonic != CSRW) {
+                           instruction |= reg() << RD;
+                           comma();
+                        }
+                        instruction |= csr() << 20;
+                        if (mnemonic != CSRR) {
+                           comma();
+                           instruction |= reg() << RS1;
+                        }
+                     }
+                     break;
+                  case CSRWI:
+                  case CSRRWI:
+                  case CSRRSI:
+                  case CSRRCI:
+                     // CSR short immediate instrucions / pseudo instructions
+                     // e.g. csrrwi rd, csr, imm5
+                     //      csrwi      csr, imm5
+                     {
+                        if (mnemonic != CSRWI) {
+                           instruction |= reg() << RD;
+                           comma();
+                        }
+                        instruction |= csr() << 20;
+                        comma();
+                        instruction |= uimm5() << RS1;
+                     }
+                     break;
 
                   default:
                      break;
