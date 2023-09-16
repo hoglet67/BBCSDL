@@ -45,6 +45,8 @@ VAR exprs (void) ;
 VAR loadn (void *, unsigned char) ;
 void storen (VAR, void *, unsigned char) ;
 
+// Special value for the x#<itemi> reg name prefix
+#define XHASH 32
 
 // Opcode register positions within 32-bit instruction
 
@@ -471,6 +473,7 @@ static char *registers[] = {
    "t5",
    "t6",
    "tp",
+   "x#",
    "x0",
    "x10",
    "x1",
@@ -538,6 +541,7 @@ static unsigned char regno[] = {
    30, // t5
    31, // t6
    4,  // tp
+   XHASH, // x#
    0,  // x0
    10, // x10
    1,  // x1
@@ -701,12 +705,31 @@ static int lookup_mnemonic (void) {
    return lookup(mnemonics, sizeof(mnemonics)/sizeof(mnemonics[0])) ;
 }
 
+// Parse a register without throwing an error
+static int parse_reg () {
+   nxt();
+   int i = lookup (registers, sizeof(registers) / sizeof(registers[0])) ;
+   if (i < 0) {
+      return -1;
+   }
+   i = regno[i];
+   // Handle the special x#<itemi> prefix
+   if (i == XHASH) {
+      i = itemi();
+   }
+   // Sanity check it's a valid register
+   if (i >= 0 && i <= 31) {
+      return i;
+   } else {
+      return -1;
+   }
+}
+
 static int count_regs () {
    signed char *old_esi = esi; // save the program pointer
    int i, n = 0;
    do {
-      nxt();
-      i = lookup (registers, sizeof(registers) / sizeof(registers[0])) ;
+      i = parse_reg();
       if (i < 0) {
          break; // not a register, so terminate
       }
@@ -722,17 +745,11 @@ static int count_regs () {
 
 static unsigned char reg (void)
 {
-   int i ;
-   nxt () ;
-   i = lookup (registers, sizeof(registers) / sizeof(registers[0])) ;
-   if (i < 0)
-      {
-         i = itemi() ;
-         if ((i < 0) || (i > 31))
-            error (16, NULL) ; // 'Syntax error'
-         return i ;
-      }
-   return regno[i] ;
+   int i = parse_reg();
+   if (i < 0) {
+      error (16, NULL) ; // 'Syntax error'
+   }
+   return (unsigned char) i;
 }
 
 static unsigned int csr (void)
