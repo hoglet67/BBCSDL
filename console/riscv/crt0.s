@@ -16,11 +16,11 @@ error_handler:
 
 # Called with a0 bit 6 being the escape flag
 escape_handler:
-   andi    a0, a0, 64
-   beqz    a0, done
-   la      a0, flags
-   lw      t0, (a0)
-   ori     t0, t0, 0x80
-   sw      t0, (a0)
-done:
+   andi    a0, a0, 64         # mask escape flag
+   slli    a0, a0, 1          # shift escape flag into bit 7
+   la      t1, flags          # get the address of the flags variable
+   lw      t0, (t1)           # read the flags variable from memory
+   andi    t0, t0, 0xffffff7f # clear bit 7
+   or      t0, t0, a0         # copy escape flag to bit 7
+   sw      t0, (t1)           # write the flags variable back to memory
    ret
