@@ -12,7 +12,7 @@
 
 #define ECALL_BASE  0x00AC0000
 
-#define OS_QUIT     (ECALL_BASE +  0)   // Unused
+#define OS_QUIT     (ECALL_BASE +  0)
 #define OS_CLI      (ECALL_BASE +  1)
 #define OS_BYTE     (ECALL_BASE +  2)
 #define OS_WORD     (ECALL_BASE +  3)
@@ -25,7 +25,7 @@
 #define OS_BPUT     (ECALL_BASE + 10)
 #define OS_GBPB     (ECALL_BASE + 11)
 #define OS_FIND     (ECALL_BASE + 12)
-#define OS_SYS_CTRL (ECALL_BASE + 13)   // Unused
+#define OS_SYS_CTRL (ECALL_BASE + 13)
 #define OS_HANDLERS (ECALL_BASE + 14)
 #define OS_ERROR    (ECALL_BASE + 15)   // Unused
 
