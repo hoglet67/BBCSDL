@@ -187,6 +187,8 @@ void _main(char *params) {
    _oshandlers(-3, error_handler,  0, &old_error_handler,  NULL);
    _oshandlers(-2, escape_handler, 0, &old_escape_handler, NULL);
 
+   flags = 0; // Clear flags (e.g. escape flag)
+
    int ret = basic(progRAM, userTOP, immediate);
 
    // Restore old handlers
