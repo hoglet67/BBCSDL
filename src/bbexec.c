@@ -6,7 +6,7 @@
 *       Broadcasting Corporation and used with their permission   *
 *                                                                 *
 *       bbexec.c: Variable assignment and statement execution     *
-*       Version 1.35a, 04-Apr-2023                                *
+*       Version 1.39a, 20-Dec-2023                                *
 \*****************************************************************/
 
 #include <string.h>
@@ -223,6 +223,7 @@ void storen (VAR v, void *ptr, unsigned char type)
 			v.d.d = v.f ;
 			if ((v.s.l == 0x7FF00000) || (v.s.l == 0xFFF00000))
 				error (20, NULL) ; // 'Number too big'
+			if (v.s.l == 0) v.d.d = 0.0 ;
 			USTORE(ptr, v.s.p) ;
 			USTORE((char *)ptr + 4, v.s.l) ;
 			}
@@ -1089,6 +1090,7 @@ static void defscan (signed char *edx)
 			return ;
 		oldesi = esi ;
 		esi = edx + 1 ; // Byte after DEF
+		curlin = esi - (signed char *) zero ;
 		nxt () ;
 		if ((*esi == TPROC) || (*esi == TFN))
 		    {
@@ -1098,6 +1100,7 @@ static void defscan (signed char *edx)
 			VSTORE(ptr, esi) ;
 		    }
 		esi = oldesi ;
+		curlin = esi - (signed char *) zero ;
 		edx -= 3 ; // point to line-length byte
 		edx += (int) *(unsigned char *)edx ;
 	    }
@@ -1487,6 +1490,7 @@ VAR xeq (void)
 			    {
 				unsigned char type ;
 				void *ptr ;
+				volatile int seq ;
 				int count = 0 ;
 				signed char *oldesi = esi ;
 				char *edi = accs ;
@@ -1531,6 +1535,7 @@ VAR xeq (void)
 					*--esp = count ;
 					*--esp = RETCHK ;
 					esi = oldesi - 1 ;
+					for (seq=0; seq<1; seq++) ; // GCC bug?
 					// transfer secret [accs] to formal [esi] 
 					esi = argue ((signed char *)accs - 1, esp + 2, 1) ;
 				    }
@@ -1792,38 +1797,41 @@ VAR xeq (void)
 						break ; // already installed
 					edi += ll ;
 				    }
-				chan = osopen (0, accs) ;
-				if (chan == 0)
-					error (214, "File or path not found") ;
- 				size = getext (chan) ;
-				osshut (chan) ;
-				oshwm (edi + v.s.l + 5 + size, 0) ;
-				ISTORE(edi, v.s.l + 5) ;
-				memcpy (edi + 4, accs, v.s.l + 1) ;
-				osload (accs, edi + v.s.l + 5, size) ;
-				newtop = gettop (edi, NULL) ;
-				if (newtop == NULL) 
-					error (52, NULL) ; // 'Bad library'
+				if (ll == 0)
+				    {
+					chan = osopen (0, accs) ;
+					if (chan == 0)
+						error (214, "File or path not found") ;
+ 					size = getext (chan) ;
+					osshut (chan) ;
+					oshwm (edi + v.s.l + 5 + size, 0) ;
+					ISTORE(edi, v.s.l + 5) ;
+					memcpy (edi + 4, accs, v.s.l + 1) ;
+					osload (accs, edi + v.s.l + 5, size) ;
+					newtop = gettop (edi, NULL) ;
+					if (newtop == NULL) 
+						error (52, NULL) ; // 'Bad library'
 #ifdef PICO
-				libtop = newtop ;
+					libtop = newtop ;
 #endif
-				if (al == TINSTALL)
-				    {
-					defscan (libase + (signed char *) zero) ;
-					defscan (vpage + (signed char *) zero) ;
-				    }
-				else
-				    {
-					ISTORE(newtop, 0xF8000005) ;
-					*(short *)(newtop + 4) = 0x0D ;
-					check () ;
-					esp -= STRIDE ;
-					*(void **)esp = esi ;
-					*--esp = GOSCHK ;
-					esp -= STRIDE ;
-					*(void **)esp = edi ;
-					*--esp = CALCHK ;
-					esi = edi + v.s.l + 4 ;
+					if (al == TINSTALL)
+					    {
+						defscan (libase + (signed char *) zero) ;
+						defscan (vpage + (signed char *) zero) ;
+					    }
+					else
+					    {
+						ISTORE(newtop, 0xF8000005) ;
+						*(short *)(newtop + 4) = 0x0D ;
+						check () ;
+						esp -= STRIDE ;
+						*(void **)esp = esi ;
+						*--esp = GOSCHK ;
+						esp -= STRIDE ;
+						*(void **)esp = edi ;
+						*--esp = CALCHK ;
+						esi = edi + v.s.l + 4 ;
+					    }
 				    }
 				}
 				break ;
@@ -2405,7 +2413,7 @@ VAR xeq (void)
 		void __attribute__ ((noinline)) nestedCOLOUR(void)
 #endif
 				{
-				int r, g, b, n = expri () ;
+				int r = 0, g = 0, b = 0, t, n = expri () ;
 				if (*esi != ',')
 				    {
 					oswrch (17) ;
@@ -2414,14 +2422,19 @@ VAR xeq (void)
 				else
 				    {
 					esi ++ ;
-					r = expri () ;
-					comma () ;
-					g = expri () ;
-					comma ();
-					b = expri () ;
+					t = expri () ;
+					if (*esi == ',')
+					    {
+						r = t ;
+						t = 16 ;
+						esi ++ ;
+						g = expri () ;
+						comma ();
+						b = expri () ;
+					    }
 					oswrch (19) ;
 					oswrch (n) ;
-					oswrch (16) ;
+					oswrch (t) ;
 					oswrch (r) ;
 					oswrch (g) ;
 					oswrch (b) ;
@@ -3255,7 +3268,7 @@ VAR xeq (void)
 				if (type1 != type2)
 					error (6, NULL) ; // 'Type mismatch'
 				if ((type1 == 36) || (type1 & BIT6))
-					n = sizeof(size_t) ; // whole array
+					n = sizeof(size_t) ; // whole array or FN/PROC
 				else if (type1 == 128)
 				    {
 					unsigned int t ;
@@ -3650,8 +3663,8 @@ VAR xeq (void)
 				while (1)
 				    {
 					void *ebp ;
-					int ebx = 0 ; // data size
-					int ecx = 0 ; // dims count
+					unsigned int ebx = 0 ; // data size
+					unsigned int ecx = 0 ; // dims count
 					char *edx ; // heap pointer
 					unsigned char type = 0 ;
 					signed char *oldesi ;
@@ -3704,12 +3717,15 @@ VAR xeq (void)
 						*edi++ = (unsigned char) ecx ;
 						for (i = ecx-1; i >= 0; i--)
 						    {
-							int eax = *(int *)(esp + i) ;
+							unsigned int eax = *(int *)(esp + i) ;
 							ISTORE(edi, eax) ;
 							edi += 4 ;
+#if defined __GNUC__ && __GNUC__ < 5
 							ebx *= eax ;
-							if (ebx < 0)
+#else
+							if (__builtin_umul_overflow (eax, ebx, &ebx))
 								error (11, NULL) ; // 'DIM space'
+#endif
 						    }
 						esp += ecx ;
 						ecx = ecx * 4 + 1 ; // size of array descriptor
@@ -3811,7 +3827,11 @@ VAR xeq (void)
 							    }
 
 						if ((edx + ebx + STACK_NEEDED) > (char *) esp)
+						    {
+							CSTORE(ebp, 0) ; 
 							error (11, NULL) ; // 'DIM space'
+						    }
+
 						pfree = edx + ebx - (char *) zero ;
 
 						if (type == (STYPE + 0x40)) // structure array ?

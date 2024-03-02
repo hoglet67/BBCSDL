@@ -3,7 +3,7 @@
 *       Copyright (C) R. T. Russell, 2023                         *
 *                                                                 *
 *       bbccos.c: Command Line Interface, ANSI VDU drivers        *
-*       Version 0.45a, 12-Aug-2023                                *
+*       Version 0.46a, 14-Dec-2023                                *
 \*****************************************************************/
 
 #include <stdlib.h>
@@ -13,6 +13,7 @@
 #include <ctype.h>
 #include <string.h>
 #ifdef PICO
+#include <picocos.h>
 #include "lfswrap.h"
 extern char *szLoadDir ;  // @dir$
 extern int dirlen;
@@ -115,6 +116,7 @@ static void newmode (short wx, short wy, short cx, short cy, short nc, signed ch
 		printf ("\033[37m\033[40m") ;
 
 	printf ("\033[H\033[J") ;
+	printf ("\033[?25h") ;
 
 	scroln = 0 ;
 }
@@ -217,7 +219,7 @@ void xeqvdu (int code, int data1, int data2)
 # endif
 #endif
 	    {
-		fwrite (&vdu, 1, 1, stdout) ;
+		printf ("%c", vdu) ;
 		return ;
 	    }
 
@@ -254,7 +256,7 @@ void xeqvdu (int code, int data1, int data2)
 			break ;
 
 		case 7: // BELL
-			fwrite (&vdu, 1, 1, stdout) ;
+			printf ("%c", vdu) ;
 			break ;
 
 		case 8: // LEFT
@@ -270,7 +272,7 @@ void xeqvdu (int code, int data1, int data2)
 			else
 			    {
 				col-- ;
-				fwrite (&vdu, 1, 1, stdout) ;
+				printf ("%c", vdu) ;
 			    }
 			break ;
 
@@ -305,7 +307,7 @@ void xeqvdu (int code, int data1, int data2)
 			break ;
 
 		case 13: // RETURN
-			fwrite (&vdu, 1, 1, stdout) ;
+			printf ("%c", vdu) ;
 			col = 0 ;
 			break ;
 
@@ -366,7 +368,7 @@ void xeqvdu (int code, int data1, int data2)
 				col = 0 ;
 				newline (&col, &row) ;
 			    }
-			fwrite (&code, 1, 1, stdout) ;
+			printf ("%c", code) ;
 			if ((col == rhs) && ((cmcflg & 1) == 0))
 			    {
 				printf ("\015") ;
@@ -405,7 +407,7 @@ void xeqvdu (int code, int data1, int data2)
 					col = 0 ;
 					newline (&col, &row) ;
 				    }
-				fwrite (&vdu, 1, 1, stdout) ;
+				printf ("%c", vdu) ;
 				if ((col == rhs) && ((cmcflg & 1) == 0))
 				    {
 					printf ("\015") ;
@@ -424,6 +426,7 @@ void xeqvdu (int code, int data1, int data2)
 char *setup (char *dst, char *src, char *ext, char term, unsigned char *pflag)
 {
 	unsigned char flag = 0 ;
+	char *limit = dst + 0x100 ;
 
 	while (*src == ' ') src++ ;		// Skip leading spaces
 	if ((*src == '"') && (term != '"'))
@@ -452,6 +455,7 @@ char *setup (char *dst, char *src, char *ext, char term, unsigned char *pflag)
 			flag |= BIT1 ;		// Flag path present
 		}
 		*dst++ = ch ;
+		if (dst >= limit) error (204, "Bad name") ;
 	}
 
 	if (flag & BIT7)
@@ -461,8 +465,10 @@ char *setup (char *dst, char *src, char *ext, char term, unsigned char *pflag)
 	}
 	else if (flag & BIT0)
 	{
+		int n = strlen (ext) ;
+		if (dst + n >= limit) error (204, "Bad name") ;
 		strcpy (dst, ext) ;
-		dst += strlen (ext) ;
+		dst += n ;
 	}
 
 	if (pflag != NULL)
@@ -575,7 +581,7 @@ static int wild (char *ebx, char *edx)
 void oscli (char *cmd)
 {
 	int b = 0, h = POWR2, n ;
-	char cpy[256] ;
+	char cpy[MAX_PATH] ;
 	char path[MAX_PATH], path2[MAX_PATH] ;
 	FILE *srcfile, *dstfile ;
 	DIR *d ;
@@ -587,9 +593,9 @@ void oscli (char *cmd)
 	if ((*cmd == 0x0D) || (*cmd == '|'))
 		return ;
 
-	q = memchr (cmd, 0x0D, 256) ;
+	q = memchr (cmd, 0x0D, sizeof(cpy)) ;
 	if (q == NULL)
-		error (204, "Bad name") ;
+		error (19, NULL) ; // 'String too long'
 	memcpy (cpy, cmd, q - cmd) ;
 	cpy[q - cmd] = 0 ;
 	p = cpy ;
@@ -905,7 +911,7 @@ void oscli (char *cmd)
 				while (*p == ' ') p++ ;
 				if (*p == '+')
 					n = strtol (p + 1, &p, 16) ;
-				else
+				else if (*p != 0x0D)
 					n = (char *) (size_t) strtoull (p, &p, 16) - q ;
 			    }
 			if ((n <= 0) && ((q < (char *)userRAM) || (q >= (char *)userTOP)))
@@ -994,7 +1000,7 @@ void oscli (char *cmd)
 				while (*p == ' ') p++ ;
 				if (*p == '+')
 					n = strtol (p + 1, &p, 16) ;
-				else
+				else if (*p != 0x0D)
 					n = (char *) (size_t) strtoull (p, &p, 16) - q ;
 			    }
 			if (n <= 0)

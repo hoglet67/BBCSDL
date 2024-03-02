@@ -1,12 +1,12 @@
 /*****************************************************************\
 *       32-bit or 64-bit BBC BASIC Interpreter                    *
-*       (C) 2017-2023  R.T.Russell  http://www.rtrussell.co.uk/   *
+*       (C) 2017-2024  R.T.Russell  http://www.rtrussell.co.uk/   *
 *                                                                 *
 *       The name 'BBC BASIC' is the property of the British       *
 *       Broadcasting Corporation and used with their permission   *
 *                                                                 *
 *       bbeval.c: Expression evaluation, functions and arithmetic *
-*       Version 1.36a, 24-Jun-2023                                *
+*       Version 1.39a, 04-Feb-2024                                *
 \*****************************************************************/
 
 #define __USE_MINGW_ANSI_STDIO 1
@@ -177,7 +177,7 @@ static void setfpu(void) {}
 static double xpower[9] = {1.0e1, 1.0e2, 1.0e4, 1.0e8, 1.0e16, 1.0e32, 1.0e64,
 			   1.0e128, 1.0e256} ;
 #else
-static void setfpu(void) { unsigned int mode = 0x37F; asm ("fldcw %0" : : "m" (*&mode)); } 
+static void setfpu(void) { unsigned int mode = 0x37F; asm ("fldcw %0" : : "m" (*&mode)); }
 static long double xpower[13] = {1.0e1L, 1.0e2L, 1.0e4L, 1.0e8L, 1.0e16L, 1.0e32L, 1.0e64L,
 				1.0e128L, 1.0e256L, 1.0e512L, 1.0e1024L, 1.0e2048L, 1.0e4096L} ;
 #endif
@@ -241,7 +241,7 @@ int str (VAR v, char *dst, int format)
 		n = strlen (dst) ;
 	    }
 
-	if (n < width) 
+	if (n < width)
 	    {
 		memmove (dst + width - n, dst, n + 1) ;
 		memset (dst, ' ', width - n) ;
@@ -259,31 +259,32 @@ int str (VAR v, char *dst, int format)
 // Convert a numeric value to a NUL-terminated hexadecimal string:
 int strhex (VAR v, char *dst, int field)
 {
-	char fmt[12] ;
-	long long n ;
-
+#ifndef __riscv__
 #ifdef _WIN32
-	sprintf (fmt, "%%%uI64X", field) ;
+	char fmt[7] = "%*I64X" ;
 #else
-	sprintf (fmt, "%%%ullX", field) ;
+	char fmt[6] = "%*llX" ;
 #endif
+#endif
+	long long n ;
 
 	if (v.i.t)
 	    {
-		long long t = v.f ;
-		if (t != truncl (v.f))
+		n = v.f ;
+		if (n != truncl (v.f))
 			error (20, NULL) ; // 'Number too big'
-		v.i.n = t ;
 	    }
+	else
+		n = v.i.n ;
 
-	n = v.i.n ; // copy because v is effectively passed-by-reference
 	if ((liston & BIT2) == 0)
 		n &= 0xFFFFFFFF ;
 #ifdef __riscv__
+   // TODO: implement field width
 	return print_llX(dst, n);
 #else
-	return sprintf(dst, fmt, n) ;
-#endif        
+	return sprintf(dst, fmt, field, n) ;
+#endif
 }
 
 // Multiply by an integer-power of 10:
@@ -341,7 +342,7 @@ static unsigned long long number (int *pcount, int *ptrunc)
 			break ;
 		esi++ ;
 		(*pcount)++ ;
-		if ((n > 0x1999999999999999L) || ((n == 0x1999999999999999L) && 
+		if ((n > 0x1999999999999999L) || ((n == 0x1999999999999999L) &&
 				((al > '5') || *ptrunc)))
 			(*ptrunc)++ ;
 		else
@@ -605,7 +606,7 @@ static void fix2 (VAR *px, VAR *py)
 		long long t = py->f ;
 		if (t != truncl (py->f))
 			error (20, NULL) ; // 'Number too big'
-		py->i.n = t ; 
+		py->i.n = t ;
 		py->i.t = 0 ;
 	    }
 }
@@ -1410,7 +1411,7 @@ VAR item (void)
 					esi++ ;
 					term = itemi () ;
 				    }
-				allocs (&tmps, 0) ; // Free tmps (may change pfree)	
+				allocs (&tmps, 0) ; // Free tmps (may change pfree)
 				p = pfree + (char *) zero ;
 				while (count--)
 				    {
@@ -1893,7 +1894,7 @@ VAR item (void)
 				    }
 				else if (n > 1)
 					v.i.n = (rnd() % n) + 1 ;
-				else 
+				else
 				    {
 					prand.l = (unsigned int) n ;
 					prand.h = (n & 0x80000) == 0 ;
@@ -2199,8 +2200,8 @@ VAR item (void)
 			unsigned char ah = *(unsigned char *)esi++ ;
 			v.i.t = 0 ;
 			v.i.n = ((*(unsigned char *)esi++) ^ ((ah << 2) & 0xC0)) ;
-			v.i.n += ((*(unsigned char *)esi++) ^ ((ah << 4) & 0xC0)) * 256 ; 
-			} 
+			v.i.n += ((*(unsigned char *)esi++) ^ ((ah << 4) & 0xC0)) * 256 ;
+			}
 			return v ;
 
 
@@ -2258,7 +2259,7 @@ VAR item (void)
 			    {
 				v.i.n = (v.i.n << 1) | (al - '0') ;
 				al = *esi++ ;
-			    } 
+			    }
 			if ((liston & BIT2) == 0)
 				v.i.n = (v.i.n << 32) >> 32 ;
 			v.i.t = 0 ;
@@ -2435,7 +2436,7 @@ static VAR expr5 (void)
 	signed char op = nxt () ;
 	if (x.s.t == -1)
 		return x ; // string
-	while (1) 
+	while (1)
 	    {
 		if (op == '^')
 		    {
@@ -2458,7 +2459,7 @@ static VAR expr4 (void)
 	VAR x = expr5 () ;
 	if (x.s.t == -1)
 		return x ; // string
-	while (1) 
+	while (1)
 	    {
 		signed char op = *esi ;
 		if ((op == '*') || (op == '/') || (op == TMOD) || (op == TDIV))
@@ -2504,7 +2505,7 @@ static VAR expr3 (void)
 		    }
 		return x ;
 	    }
-	while (1) 
+	while (1)
 	    {
 		signed char op = *esi ;
 		if ((op == '+') || (op == '-') || (op == TSUM))
@@ -2612,7 +2613,7 @@ VAR expr (void)
 	VAR x = expr1 () ;
 	if (x.s.t == -1)
 		return x ; // string
-	while (1) 
+	while (1)
 	    {
 		signed char op = *esi ;
 		if ((op == TOR) || (op == TEOR))
@@ -2836,7 +2837,7 @@ int expra (void *ebp, int ecx, unsigned char type)
 				void *oldrhs = rhs ;
 				for (k = 0; k < colsl; k++)
 				    {
-					modify (math (loadn (ptr,type), '*', loadn (rhs,type)), 
+					modify (math (loadn (ptr,type), '*', loadn (rhs,type)),
 						ebp, type, '+') ;
 					ptr += size ;
 					rhs += size * colsr ;

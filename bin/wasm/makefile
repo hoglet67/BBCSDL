@@ -5,7 +5,7 @@ VPATH  = ../BBCSDL/src ../BBCSDL/include
 CXX = emcc -s USE_PTHREADS=1 -s USE_SDL=2 -s USE_SDL_TTF=2 -s USE_SDL_NET=2 \
       -I . -I ../BBCSDL/include -Wall -Wno-pthreads-mem-growth
 
-LXX = emcc -s USE_PTHREADS=1 -s USE_SDL=2 -s USE_SDL_TTF=2 -s USE_SDL_NET=2 \
+LXX = emcc -s USE_PTHREADS=1 -s USE_SDL=2 -s USE_SDL_TTF=2 -s USE_SDL_NET=2 -s MAXIMUM_MEMORY=1gb \
       -s PTHREAD_POOL_SIZE=2 -s ALLOW_MEMORY_GROWTH=1 -s WASM=1 -s ASSERTIONS=0 -s STACK_SIZE=5MB \
       -I . -I ../BBCSDL/include -Wall -Wno-pthreads-mem-growth
 
@@ -13,7 +13,7 @@ OBJ = bbmain.o bbexec.o bbeval.o bbcmos.o bbccli.o \
       bbcvdu.o bbcvtx.o flood.o sort.o bbdata.o bbcsdl.o \
       bbasmb.o SDL2_gfxPrimitives.o SDL2_rotozoom.o
 
-all: bbcsdl.html index.html
+all: bbcsdl.html
 
 bbmain.o: bbmain.c BBC.h
 	$(CXX) -c -O3 -ffast-math -fno-finite-math-only $< -o $@

@@ -1,16 +1,17 @@
 /*****************************************************************\
 *       32-bit or 64-bit BBC BASIC for SDL 2.0                    *
-*       (C) 2017-2023  R.T.Russell  http://www.rtrussell.co.uk/   *
+*       (C) 2017-2024  R.T.Russell  http://www.rtrussell.co.uk/   *
 *                                                                 *
 *       The name 'BBC BASIC' is the property of the British       *
 *       Broadcasting Corporation and used with their permission   *
 *                                                                 *
 *       bbcsdl.c Main program: Initialisation, Polling Loop       *
-*       Version 1.36a, 22-Jul-2023                                *
+*       Version 1.39a, 21-Feb-2024                                *
 \*****************************************************************/
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <errno.h>
@@ -55,6 +56,7 @@ unsigned int DIRoff = 19 ; // Used by Android x86-32 build
 #endif
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
 #include <sys/mman.h>
 #define PLATFORM "Wasm"
 #endif
@@ -180,13 +182,29 @@ static int blink = 0 ;
 static signed char oldscroln = 0 ;
 static const Uint8* keystate ;
 static int exitcode = 0, running = 1 ;
-static int MaximumRAM = MAXIMUM_RAM ;
+static intptr_t MaximumRAM = MAXIMUM_RAM ;
 static SDL_AudioSpec want, have ;
 static SDL_Rect backbutton = {0} ;
 static SDL_Texture *buttexture ;
 
 #if defined __EMSCRIPTEN__
-// dlsym implemented locally
+static EM_BOOL Emscripten_HandleFullscreenChange(int eventType, 
+		const EmscriptenFullscreenChangeEvent *fullscreenChangeEvent, void *userData)
+{
+	static int oldw, oldh ;
+	int neww = oldw, newh = oldh ;
+	SDL_Window *window = userData ;
+	if (fullscreenChangeEvent->isFullscreen)
+	    {
+		SDL_GetWindowSize (window, &oldw, &oldh) ;
+		neww = fullscreenChangeEvent->screenWidth ;
+		newh = fullscreenChangeEvent->screenHeight ;
+	    }
+	SDL_SetWindowSize (window, neww, newh) ;
+	putevt (siztrp, WM_SIZE, SDL_GetWindowID(window), (newh << 16) | neww) ;
+	flags |= ALERT ;
+	return 0;
+}
 #elif defined __WINDOWS__
 void *dlsym (void *handle, const char *symbol)
 {
@@ -206,7 +224,7 @@ void *dlsym (void *handle, const char *symbol)
 #endif
 
 #if defined __LINUX__ || defined __ANDROID__
-static void *mymap (unsigned int size)
+static void *mymap (uintptr_t size)
 {
 	FILE *fp ;
 	char line[256] ;
@@ -222,11 +240,7 @@ static void *mymap (unsigned int size)
 		start = (void *)((size_t)start & -0x1000) ; // page align (GCC extension)
 		if (start >= (base + size)) 
 			return base ;
-		if (finish > (void *)0xFFFFF000)
-			return NULL ;
 		base = (void *)(((size_t)finish + 0xFFF) & -0x1000) ; // page align
-		if (base > ((void *)0xFFFFFFFF - size))
-			return NULL ;
 	    }
 	return base ;
 }
@@ -607,6 +621,7 @@ if (SDLNet_Init() == -1)
 
 // Setting quality to "linear" can break flood-fill, affecting 'jigsaw.bbc' etc.
 #if defined __ANDROID__ || defined __IPHONEOS__
+	SDL_SetHint (SDL_HINT_THREAD_STACK_SIZE, "0x2000000") ;
 	SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengles") ;
 	SDL_SetHint ("SDL_RENDER_BATCHING", "1") ;
 	SDL_SetHint (SDL_HINT_RENDER_SCALE_QUALITY, "nearest") ;
@@ -617,6 +632,7 @@ if (SDLNet_Init() == -1)
 	SDL_GL_SetAttribute (SDL_GL_GREEN_SIZE, 6) ;
 	SDL_GL_SetAttribute (SDL_GL_BLUE_SIZE, 5) ;
 #else
+	SDL_SetHint (SDL_HINT_THREAD_STACK_SIZE, "0x2000000") ;
 	SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengl") ;
 	SDL_SetHint ("SDL_RENDER_BATCHING", "1") ;
 	SDL_SetHint (SDL_HINT_RENDER_SCALE_QUALITY, "nearest") ;
@@ -678,7 +694,7 @@ if (!SDL_RenderTargetSupported(renderer))
 	return 8;
 }
 
-SDL_GL_GetDrawableSize (window, &sizex, &sizey) ; // Window may not be the requested size
+SDL_GetRendererOutputSize (renderer, &sizex, &sizey) ; // Window may not be the requested size
 
 #if defined __ANDROID__ || defined __IPHONEOS__
 {
@@ -760,7 +776,7 @@ buttexture = MakeBackButton (renderer) ;
 
 	if (base != NULL)
 		userRAM = mmap (base, MaximumRAM, PROT_EXEC | PROT_READ | PROT_WRITE, 
-					MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0) ;
+			    MAP_FIXED | MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0) ;
 
 #endif
 
@@ -936,6 +952,7 @@ Mutex = SDL_CreateMutex () ;
 #endif
 
 SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
+SDL_EventState(SDL_DROPTEXT, SDL_ENABLE);
 SDL_PumpEvents () ;
 if (SDL_PeepEvents (&ev, 1, SDL_GETEVENT, SDL_DROPFILE, SDL_DROPFILE))
 {
@@ -1039,6 +1056,8 @@ while ((Thread = SDL_CreateThread(entry, "Interpreter", (void *) immediate)) == 
 
 // Main polling loop:
 #ifdef __EMSCRIPTEN__
+    emscripten_set_fullscreenchange_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, window, 0,
+						Emscripten_HandleFullscreenChange);
     emscripten_set_main_loop(mainloop, 0, 1);
 #else
 while (running)
@@ -1499,6 +1518,7 @@ static int maintick (void)
 						c += 32 ;
 				    }
 				else if ((ev.key.keysym.mod & KMOD_CTRL) &&
+					!(ev.key.keysym.mod & KMOD_ALT) &&
 					 (c >= SDLK_a) && (c <= SDLK_z))
 					c = c - SDLK_a + 1 ;
 				else if ((ev.key.keysym.mod & KMOD_GUI) &&
@@ -1606,6 +1626,18 @@ static int maintick (void)
 			}
 			oldx = ev.mgesture.x ;
 			oldy = ev.mgesture.y ;
+			break ;
+
+		case SDL_DROPFILE:
+		case SDL_DROPTEXT:
+			if (systrp && (sysflg & 8)) 
+			{
+				int wparam = ((intptr_t) ev.drop.file) & 0x0FFFFFFFFUL ;
+				int lparam = ((intptr_t) ev.drop.file) / 0x100000000UL ;
+				putevt (systrp, ev.type, wparam, lparam) ;
+				flags |= ALERT ;
+				break ;
+			}
 			break ;
 
 		case SDL_WINDOWEVENT:

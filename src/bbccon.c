@@ -3,7 +3,7 @@
 *       Copyright (C) R. T. Russell, 2021-2023                     *
 *                                                                  *
 *       bbccon.c Main program, Initialisation, Keyboard handling   *
-*       Version 0.44a, 25-Jul-2023                                 *
+*       Version 0.46a, 20-Dec-2023                                 *
 \******************************************************************/
 
 #define _GNU_SOURCE
@@ -84,9 +84,10 @@ char *szLibrary ;
 char *szUserDir ;
 char *szTempDir ;
 char *szCmdLine ;
-int MaximumRAM = MAXIMUM_RAM ;
+intptr_t MaximumRAM = MAXIMUM_RAM ;
 timer_t UserTimerID ;
 unsigned int palette[256] ;
+void *TTFcache[1] ;
 
 // Array of VDU command lengths:
 static int vdulen[] = {
@@ -124,6 +125,7 @@ void quiet (void) ;
 // Dummy functions:
 void gfxPrimitivesSetFont(void) { } ;
 void gfxPrimitivesGetFont(void) { } ;
+void RedefineChar(void) { } ;
 
 // File scope variables:
 static unsigned char inputq[QSIZE] ;
@@ -523,13 +525,18 @@ long long apicall_ (long long (*APIfunc) (size_t, size_t, size_t, size_t, size_t
 			volatile double e, volatile double f, volatile double g, volatile double h)
 	{
 		long long result ;
-#ifdef _WIN32
+#ifdef __WIN64__
+		static void* savesp ;
+		asm ("mov %%rsp,%0" : "=m" (savesp)) ;
+#elif defined _WIN32
 		static void* savesp ;
 		asm ("mov %%esp,%0" : "=m" (savesp)) ;
 #endif
 		result = APIfunc (p->i[0], p->i[1], p->i[2], p->i[3], p->i[4], p->i[5],
 				p->i[6], p->i[7], p->i[8], p->i[9], p->i[10], p->i[11]) ;
-#ifdef _WIN32
+#ifdef __WIN64__
+		asm ("mov %0,%%rsp" : : "m" (savesp)) ;
+#elif defined _WIN32
 		asm ("mov %0,%%esp" : : "m" (savesp)) ;
 #endif
 		return result ;
@@ -548,13 +555,18 @@ double fltcall_ (double (*APIfunc) (size_t, size_t, size_t, size_t, size_t, size
 			volatile double e, volatile double f, volatile double g, volatile double h)
 	{
 		double result ;
-#ifdef _WIN32
+#ifdef __WIN64__
+		static void* savesp ;
+		asm ("mov %%rsp,%0" : "=m" (savesp)) ;
+#elif defined _WIN32
 		static void* savesp ;
 		asm ("mov %%esp,%0" : "=m" (savesp)) ;
 #endif
 		result = APIfunc (p->i[0], p->i[1], p->i[2], p->i[3], p->i[4], p->i[5],
 				p->i[6], p->i[7], p->i[8], p->i[9], p->i[10], p->i[11]) ;
-#ifdef _WIN32
+#ifdef __WIN64__
+		asm ("mov %0,%%rsp" : : "m" (savesp)) ;
+#elif defined _WIN32
 		asm ("mov %0,%%esp" : : "m" (savesp)) ;
 #endif
 		return result ;
@@ -1834,8 +1846,19 @@ pthread_t hThread = NULL ;
 
 	if (*szAutoRun && (NULL != (ProgFile = fopen (szAutoRun, "rb"))))
 	    {
+		unsigned char *esi = progRAM ;
 		fread (progRAM, 1, userTOP - progRAM, ProgFile) ;
 		fclose (ProgFile) ;
+		while (*esi)
+		    {
+			esi += (int) *esi ; 
+			if (*(esi-1) != 0x0D) 
+			    {
+				fprintf(stderr, "%s isn't a valid internal-format (.bbc) file\r\n",
+						szAutoRun) ;
+				return 10 ;
+			    }
+		    }
 	    }
 	else
 	    {
