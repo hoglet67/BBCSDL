@@ -3616,19 +3616,25 @@ VAR xeq (void)
 				if (*esi == TOFF)
 				    {
 					esi++ ;
-					quiet () ;
+					quiet (0) ;
 				    }
 				else
-				    {
-					short chan = expri () ;
-					comma () ;
-					signed char ampl = expri () ;
-					comma () ;
-					unsigned char pitch = expri () ;
-					comma () ;
-					unsigned char duration = expri () ;
-					sound (chan, ampl, pitch, duration) ;
-				    }
+				    if (*esi == TON)
+				        {
+					    esi++ ;
+					    quiet (-1) ;
+				        }
+				    else
+				        {
+					    short chan = expri () ;
+					    comma () ;
+					    signed char ampl = expri () ;
+					    comma () ;
+					    unsigned char pitch = expri () ;
+					    comma () ;
+					    unsigned char duration = expri () ;
+					    sound (chan, ampl, pitch, duration) ;
+				        }
 				}
 				break ;
 

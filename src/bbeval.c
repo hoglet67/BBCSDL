@@ -155,6 +155,9 @@ unsigned char osrdch (void) ;	// Get character from console input
 int oskey (int) ;		// Wait for character or test key
 int getime (void) ;		// Return centisecond count
 int getims (void) ;		// Get clock time string to accs
+#ifdef __riscv__
+int getmode(void) ;		// Get current screen mode
+#endif
 int vtint (int, int) ;		// Get RGB pixel colour or -1
 int vpoint (int, int) ;		// Get palette index or -1
 void getcsr (int*, int*) ;	// Get text cursor (caret) coords
@@ -1305,7 +1308,11 @@ VAR item (void)
 /************************************ MODE *************************************/
 
 		case TMODE:
+#ifdef __riscv__
+			v.i.n = getmode() ;
+#else
 			v.i.n = modeno ;
+#endif
 			v.i.t = 0 ;
 			return v ;
 
