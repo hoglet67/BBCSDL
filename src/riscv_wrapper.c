@@ -42,7 +42,7 @@ extern char *buff;              // Temporary string buffer
 void *userRAM = NULL;
 void *progRAM = NULL;
 void *userTOP = NULL;
-const char szVersion[] = "BBC BASIC for RISC-V Co Processor "VERSION;
+const char szVersion[] = "BBC BASIC for RISC-V CoProcessor "VERSION;
 const char szNotice[] = "(C) Copyright R. T. Russell, "YEAR;
 char *szLoadDir;
 char *szLibrary;
@@ -921,7 +921,7 @@ int widths(unsigned char *s, int l) { // Get string width in graphics units
 void mouse(int *px, int *py, int *pb) { // Get mouse state
    int x, y;
    x=0x07; _osbyte(128, &x, NULL, NULL); *px=x;
-   x=0x08; _osbyte(128, &n, NULL, NULL); *py=x;
+   x=0x08; _osbyte(128, &x, NULL, NULL); *py=x;
    x=0xF6; y=0xFF; _osbyte(129, &x, &y, NULL); *pb=(x && 1);        // left button
    x=0xF5; y=0xFF; _osbyte(129, &x, &y, NULL); *pb=(x && 2) || *pb; // middle button
    x=0xF4; y=0xFF; _osbyte(129, &x, &y, NULL); *pb=(x && 4) || *pb; // right button

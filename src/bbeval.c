@@ -3,10 +3,11 @@
 *       (C) 2017-2024  R.T.Russell  http://www.rtrussell.co.uk/   *
 *                                                                 *
 *       The name 'BBC BASIC' is the property of the British       *
-*       Broadcasting Corporation and used with their permission   *
+*       Broadcasting Corporation and used with their permission,  *
+*       it is not transferrable to a forked or derived work.      *
 *                                                                 *
 *       bbeval.c: Expression evaluation, functions and arithmetic *
-*       Version 1.39a, 04-Feb-2024                                *
+*       Version 1.40a, 28-Apr-2024 - 07-Jan-2025 RISCV #ifdefs    *
 \*****************************************************************/
 
 #define __USE_MINGW_ANSI_STDIO 1
@@ -21,9 +22,7 @@
 #include "BBC.h"
 
 #if defined __riscv__
-
 #define floorl floor
-
 static long long powers_of_10[] = {
    -1LL,                      // 10^0
    -10LL,
@@ -93,7 +92,6 @@ int print_llX(char *buffer, unsigned long long u) {
       return sprintf(buffer, "%lX", u2);
    }
 }
-
 #endif
 
 #if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
@@ -2719,8 +2717,11 @@ int expra (void *ebp, int ecx, unsigned char type)
 					switch (op)
 					    {
 						case TOR:
-						case TAND:
 						case TEOR:
+							v = expr1 () ;
+							break ;
+
+						case TAND:
 							v = expr3 () ;
 							break ;
 
