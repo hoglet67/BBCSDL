@@ -1,12 +1,13 @@
 /*****************************************************************\
 *       32-bit or 64-bit BBC BASIC Interpreter                    *
-*       (C) 2017-2023  R.T.Russell  http://www.rtrussell.co.uk/   *
+*       (C) 2017-2024  R.T.Russell  http://www.rtrussell.co.uk/   *
 *                                                                 *
 *       The name 'BBC BASIC' is the property of the British       *
-*       Broadcasting Corporation and used with their permission   *
+*       Broadcasting Corporation and used with their permission,  *
+*       it is not transferrable to a forked or derived work.      *
 *                                                                 *
 *       bbexec.c: Variable assignment and statement execution     *
-*       Version 1.39a, 20-Dec-2023                                *
+*       Version 1.40a, 28-Apr-2024 - 07-Jan-2025 Added EXT=       *
 \*****************************************************************/
 
 #include <string.h>
@@ -87,9 +88,10 @@ void *osopen (int, char *) ;	// Open a file
 unsigned char osbget (void *, int*) ; // Read a byte from a file
 void osbput (void *, unsigned char) ; // Write a byte to a file
 void setptr (void *, long long) ;	// Set the file pointer
+void setext (void *, long long) ;	// Set the file extent
 long long getext (void *) ;	// Get file length
 void osshut (void *) ;		// Close file(s)
-void osload (char*, void *, int) ; // Load a file to memory
+void osload (char*, void *, unsigned int) ; // Load a file to memory
 #ifdef CAN_SET_RTC
 void putims (const char *) ;	// Set real-time-clock
 #endif
@@ -958,7 +960,7 @@ static signed char* argue (signed char *ebx, heapptr *edi, int flag)
 }
 
 // Adjust the format pointers in nested structures to point into stack:
-static void fixup (void *edi, int ebx)
+static void fixup (void *edi, intptr_t ebx)
 {
 	edi += 4 ; // bump past size field (GCC extension)
 	while (1)
@@ -1822,7 +1824,7 @@ VAR xeq (void)
 					else
 					    {
 						ISTORE(newtop, 0xF8000005) ;
-						*(short *)(newtop + 4) = 0x0D ;
+						SSTORE(newtop + 4, 0x0D) ;
 						check () ;
 						esp -= STRIDE ;
 						*(void **)esp = esi ;
@@ -1941,7 +1943,14 @@ VAR xeq (void)
 /************************************  EXT  ************************************/
 
 			case TEXTR:
-				error (255, "Sorry, not implemented") ;
+				{
+				long long n ;
+				void *chan = channel () ;
+				equals () ;
+				n = expri () ;
+				setext (chan, n) ;
+				}
+				break ;
 
 /************************************ PAGE *************************************/
 
@@ -3618,6 +3627,7 @@ VAR xeq (void)
 					esi++ ;
 					quiet () ;
 				    }
+// TODO: SOUND ON
 				else
 				    {
 					short chan = expri () ;
@@ -3711,6 +3721,8 @@ VAR xeq (void)
 						char *edi = pfree + (char *) zero ;
 						if ((edx > edi) && (edx < (char *)esp))
 							edi = edx ;
+						else if ((edx == edi) && (ILOAD(ebp) != 1))
+							edi = (char *) ((intptr_t) edi | 3) ; // Align
 
 						type |= BIT6 ; // Flag array
 						ebx += (type & TMASK) ;
@@ -3812,6 +3824,8 @@ VAR xeq (void)
 							edi = edx ;  // tag structure
 							edx = pfree + (char *) zero ;
 						    }
+						else if (edx == edi)
+							edx = (char *) ((intptr_t) edx | 3) ; // Align
 
 						if (ecx == 0)
 							CSTORE(ebp, edi) ; // no array
@@ -3940,6 +3954,7 @@ VAR xeq (void)
 								eax = VLOAD(edi + ecx) ;
 							if (eax != edx)
 								error (10, NULL) ; // 'Bad DIM'
+							edx = pfree + zero ;
 						    }
 						else if (edx > (pfree + (char *) zero))
 						    {
@@ -3947,8 +3962,12 @@ VAR xeq (void)
 								edi -= edx - pfree - (char *) zero ;
 							ecx += edx - pfree - (char *) zero ;
 							fixup (pfree + zero, edi - pfree - (char *) zero) ;
+							edx = pfree + zero ;
 						    }
-						if ((ecx != 0) && memcmp (pfree + zero, edi, ecx))
+						else
+							edx = (char *) ((intptr_t) edx | 3) ; // Align3
+
+						if ((ecx != 0) && memcmp (edx, edi, ecx))
 							error (10, NULL) ; // 'Bad DIM statement'
 					    }
 

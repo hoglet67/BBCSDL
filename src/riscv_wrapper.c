@@ -8,6 +8,9 @@
 #include "version.h"
 #include "build.h"
 
+// 2025-01-05 JGH: Updated ossave(), setext(), getmode(), vgetc(), mouse(), quiet(), getims().
+
+
 // RISC-V Co Processor Sys Call Numbers
 
 #define ECALL_BASE  0x00AC0000
@@ -39,7 +42,7 @@ extern char *buff;              // Temporary string buffer
 void *userRAM = NULL;
 void *progRAM = NULL;
 void *userTOP = NULL;
-const char szVersion[] = "BBC BASIC for RISC-V Co Processor "VERSION;
+const char szVersion[] = "BBC BASIC for RISC-V CoProcessor "VERSION;
 const char szNotice[] = "(C) Copyright R. T. Russell, "YEAR;
 char *szLoadDir;
 char *szLibrary;
@@ -756,7 +759,7 @@ unsigned char osrdch(void) { // Get character from console input
 void osline(char *buffer) {     // Get a line of console input
    unsigned int block[4];
    block[0] = (unsigned int) buffer;
-   block[1] = 0xff;
+   block[1] = 0xff;		// NB: 6502 BASIC uses 0xEE
    block[2] = 32;
    block[3] = 255;
    int ret = _osword(0, block);
@@ -808,7 +811,7 @@ void osload(char *p, void *addr, int max) { // Load a file to memory
 void ossave(char *p, void *addr, int len) { // Save a file from memory
    uint32_t start = (uint32_t) addr;
    uint32_t end   = (uint32_t) (addr + len);
-   _osfile(0, sanitize_filename(p), NULL, NULL, &start, &end);
+   _osfile(0, sanitize_filename(p), &start, &start, &start, &end);
 }
 
 void *osopen(int type, char *p) { // Open a file
@@ -853,6 +856,10 @@ long long getext(void *chan) {  // Get file length
    return ext;
 }
 
+void setext(void *chan, long long ext) { // Set the file length
+   _osargs(3, chan, &ext);
+}
+
 unsigned char osbget(void *chan, int *peof) { // Read a byte from a file
    return _osbget(chan, peof);
 }
@@ -865,14 +872,23 @@ void osbput(void *chan, unsigned char byte) { // Write a byte to a file
 
 unsigned int palette[256];
 
+int getmode(void) { // Get current screen mode
+   int n;
+   _osbyte(0x87, NULL, &n, NULL);
+   return n;
+}
+
 void getcsr(int *px, int *py) { // Get text cursor (caret) coords
    _osbyte(0x86, px, py, NULL);
 }
 
 int vgetc(int x, int y) { // Get character at specified coords
-   text("TODO: vgetx");
-   crlf();
-   return 0;
+   int oldx, oldy, n;
+   _osbyte(0x86, &oldx, &oldy, NULL);
+   _oswrch(31); _oswrch(x); _oswrch(y);
+   _osbyte(0x87, &n, NULL, NULL);
+   _oswrch(31); _oswrch(oldx); _oswrch(oldy);
+   return n && 0xFF;
 }
 
 int vpoint(int x, int y) { // Get palette index or -1
@@ -884,7 +900,7 @@ int vpoint(int x, int y) { // Get palette index or -1
       block[1] = (int16_t) y;
       block[2] = 0;
       _osword(9, block);
-      return block[2];
+      return block[2];  // CHECK: extend 0xFF to -1 ?
    }
 }
 
@@ -903,21 +919,25 @@ int widths(unsigned char *s, int l) { // Get string width in graphics units
 // MOS - Mouse
 
 void mouse(int *px, int *py, int *pb) { // Get mouse state
-   text("TODO: mouse");
-   crlf();
+   int x, y;
+   x=0x07; _osbyte(128, &x, NULL, NULL); *px=x;
+   x=0x08; _osbyte(128, &x, NULL, NULL); *py=x;
+   x=0xF6; y=0xFF; _osbyte(129, &x, &y, NULL); *pb=(x && 1);        // left button
+   x=0xF5; y=0xFF; _osbyte(129, &x, &y, NULL); *pb=(x && 2) || *pb; // middle button
+   x=0xF4; y=0xFF; _osbyte(129, &x, &y, NULL); *pb=(x && 4) || *pb; // right button
 }
 
-void mouseon(int type) { // Set mouse cursor (pointer)
+void mouseon(int type) { // Show pointer
    text("TODO: mouseon");
    crlf();
 }
 
-void mouseoff(void) { // Hide mouse cursor
+void mouseoff(void) { // Hide pointer
    text("TODO: mouseoff");
    crlf();
 }
 
-void mouseto(int x, int y) { // Move mouse cursor
+void mouseto(int x, int y) { // Move pointer
    text("TODO: mouseto");
    crlf();
 }
@@ -925,9 +945,8 @@ void mouseto(int x, int y) { // Move mouse cursor
 
 // MOS - Sound
 
-void quiet(void) {     // Disable sound generation
-   text("TODO: quiet");
-   crlf();
+void quiet(int n) {     // Disable/enable sound generation
+   _osbyte(210, &n, NULL, NULL);
 }
 
 void sound(short chan, signed char ampl, unsigned char pitch, unsigned char duration) { // Synthesise sound waveform
@@ -973,8 +992,8 @@ int getims(void) {     // Get clock time string to accs
       accs[24] = 13;
       return 24;
    } else {
-      strcpy(accs, "Not Implemented\n");
-      return 15;
+      accs[0] = 13;
+      return 0;
    }
 }
 

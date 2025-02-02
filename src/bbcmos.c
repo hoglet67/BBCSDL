@@ -1,13 +1,13 @@
 /*****************************************************************\
 *       32-bit or 64-bit BBC BASIC for SDL 2.0                    *
-*       (C) 2017-2023  R.T.Russell  http://www.rtrussell.co.uk/   *
+*       (C) 2017-2024  R.T.Russell  http://www.rtrussell.co.uk/   *
 *                                                                 *
 *       The name 'BBC BASIC' is the property of the British       *
 *       Broadcasting Corporation and used with their permission   *
 *                                                                 *
 *       bbcmos.c  Machine Operating System emulation              *
 *       This module runs in the context of the interpreter thread *
-*       Version 1.38a, 04-Sep-2023                                *
+*       Version 1.40a, 28-Apr-2024 - 07-Jan-2025 Added EXT=, ADVAL7/8/9 *
 \*****************************************************************/
 
 #define _GNU_SOURCE
@@ -42,6 +42,13 @@ void *dlsym (void *, const char *) ;
 #else
 #include <emmintrin.h>
 #endif
+
+#if defined __i386__ || defined __x86_64__ || defined __arm__
+#ifndef __ANDROID__
+void sortup(void){} ;
+void sortdn(void){} ;
+#endif
+#endif 
 
 // Delared in bbmain.c:
 void error (int, const char *) ;
@@ -1757,12 +1764,23 @@ int adval (int n)
 	    }
 	if (n <= -1)
 	    	return (kbdqr - kbdqw - 1) & 0xFF ;
-
+	if ((n >= 7) || (n <= 9))
+	    {
+		int x, y, b;
+		mouse(&x, &y, &b);
+		if (n == 7) return x;
+		if (n == 8) return y;
+		// This is annoying, MOUSE returns %lmr but ADVAL(9) returns %rml
+		if (n == 9) return (b & 0xFFFA) | ((b & 1)<<2) | ((b & 4)>>2);
+	    }
+	
 	if (Joystick == NULL)
 	    {
 		Joystick = SDL_JoystickOpen (0) ;
 		if (Joystick == NULL)
-			error (245, "Device unavailable") ;
+			return 0 ;		// ADVAL should not generate an error
+						// Yes, RISC OS gets this wrong
+//			error (245, "Device unavailable") ;
 	    }
 	if (n == 0)
 	    {
@@ -1823,6 +1841,7 @@ void sound (short chan, signed char ampl, unsigned char pitch, unsigned char dur
 }
 
 // Disable sound generation:
+// TODO: SOUND ON, SOUND OFF
 void quiet (void)
 {
 	int i ;
@@ -2112,7 +2131,7 @@ static SDL_RWops *lookup (void *chan)
 }
 
 // Load a file into memory:
-void osload (char *p, void *addr, int max)
+void osload (char *p, void *addr, unsigned int max)
 {
 	int n ;
 	SDL_RWops *file ;
@@ -2128,7 +2147,7 @@ void osload (char *p, void *addr, int max)
 }
 
 // Save a file from memory:
-void ossave (char *p, void *addr, int len)
+void ossave (char *p, void *addr, unsigned int len)
 {
 	int n ;
 	SDL_RWops *file ;
@@ -2136,7 +2155,7 @@ void ossave (char *p, void *addr, int len)
 		error (253, "Bad string") ;
 	file = SDL_RWFromFile (path, "w+b") ;
 	if (file == NULL)
-		error (214, "Couldn't create file") ;
+		error (192, "Couldn't create file") ;
 	n = SDL_RWwrite(file, addr, 1, len) ;
 	BBC_RWclose (file) ;
 	if (n < len)
@@ -2385,6 +2404,44 @@ long long getext (void *chan)
 	if (newptr > size)
 		return newptr ;
 	return size ;
+}
+
+// Set file size:
+void setext (void *chan, long long newext)
+{
+#if defined __WINDOWS__
+	long long oldext;
+	long long oldptr;
+
+	if (newext < 0) return;				// Ignore negative extent TODO: error?
+	oldext = getext(chan);				// Get current EXT, departs here if not open
+	if (newext == oldext) return;			// Quickly deal with no-op
+	oldptr = getptr(chan);				// Get current PTR
+	if (newext > oldext)
+	{						// Extending
+		// NB: If any of these error, we lose PTR
+		setptr (chan, oldext);			// Move PTR to end of file
+		setptr (chan, newext-1);		// Move PTR past end of file, extending it
+		osbput (chan, 0);			// Write a byte to fix it
+		setptr (chan, oldptr);			// Restore PTR
+	}
+	else
+	{						// Truncating
+		// SDL interface does not have a 'truncate' facility.
+		// Documentation recommends doing this manually via the host API.
+		if ((chan > (void *)MAX_PORTS) && (chan <= (void *)(MAX_PORTS+MAX_FILES)))
+		{					// Can't change EXT on a port
+			setptr (chan, newext);		// Move PTR to new end of file
+			SDL_RWops *file = lookup (chan) ;
+			SetEndOfFile(file->hidden.windowsio.h);
+			if (oldptr < newext)
+				setptr (chan, oldptr);	// Restore PTR
+		}
+	}
+#else
+	// TODO -> other platforms
+	return;
+#endif
 }
 
 // Get EOF status:

@@ -3,10 +3,11 @@
 *       (C) 2017-2024  R.T.Russell  http://www.rtrussell.co.uk/   *
 *                                                                 *
 *       The name 'BBC BASIC' is the property of the British       *
-*       Broadcasting Corporation and used with their permission   *
+*       Broadcasting Corporation and used with their permission,  *
+*       it is not transferrable to a forked or derived work.      *
 *                                                                 *
 *       bbeval.c: Expression evaluation, functions and arithmetic *
-*       Version 1.39a, 04-Feb-2024                                *
+*       Version 1.40a, 28-Apr-2024 - 07-Jan-2025 RISCV #ifdefs    *
 \*****************************************************************/
 
 #define __USE_MINGW_ANSI_STDIO 1
@@ -21,9 +22,7 @@
 #include "BBC.h"
 
 #if defined __riscv__
-
 #define floorl floor
-
 static long long powers_of_10[] = {
    -1LL,                      // 10^0
    -10LL,
@@ -93,7 +92,6 @@ int print_llX(char *buffer, unsigned long long u) {
       return sprintf(buffer, "%lX", u2);
    }
 }
-
 #endif
 
 #if defined __arm__ || defined __aarch64__ || defined __EMSCRIPTEN__ || defined __ANDROID__ || defined __riscv__
@@ -155,6 +153,9 @@ unsigned char osrdch (void) ;	// Get character from console input
 int oskey (int) ;		// Wait for character or test key
 int getime (void) ;		// Return centisecond count
 int getims (void) ;		// Get clock time string to accs
+#ifdef __riscv__
+int getmode(void) ;		// Get current screen mode
+#endif
 int vtint (int, int) ;		// Get RGB pixel colour or -1
 int vpoint (int, int) ;		// Get palette index or -1
 void getcsr (int*, int*) ;	// Get text cursor (caret) coords
@@ -1305,7 +1306,11 @@ VAR item (void)
 /************************************ MODE *************************************/
 
 		case TMODE:
+#ifdef __riscv__
+			v.i.n = getmode() ;
+#else
 			v.i.n = modeno ;
+#endif
 			v.i.t = 0 ;
 			return v ;
 
@@ -2712,8 +2717,11 @@ int expra (void *ebp, int ecx, unsigned char type)
 					switch (op)
 					    {
 						case TOR:
-						case TAND:
 						case TEOR:
+							v = expr1 () ;
+							break ;
+
+						case TAND:
 							v = expr3 () ;
 							break ;
 
